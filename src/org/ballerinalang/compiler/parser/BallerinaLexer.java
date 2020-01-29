@@ -17,6 +17,7 @@
  */
 package org.ballerinalang.compiler.parser;
 
+import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
@@ -27,12 +28,11 @@ import java.nio.charset.StandardCharsets;
 public class BallerinaLexer {
 
     private static final byte EOF = -1;
-
+    private final BallerinaParserErrorHandler errorHandler = new BallerinaParserErrorHandler();
+    private final PositionTracer tracer = new PositionTracer();
+    private final TokenGenerator tokenGenerator = new TokenGenerator(this.tracer);
+    private StringBuilder sb = new StringBuilder();
     private InputReader reader;
-    private StringBuilder sb = new StringBuilder(30);
-    private BallerinaParserErrorHandler errorHandler = new BallerinaParserErrorHandler();
-    private PositionTracer tracer = new PositionTracer();
-    private TokenGenerator tokenGenerator = new TokenGenerator(this.tracer);
 
     public BallerinaLexer(InputStream inputStream) {
         this.reader = new InputReader(inputStream);
@@ -58,7 +58,8 @@ public class BallerinaLexer {
         int startChar = consume();
         switch (startChar) {
             case EOF:
-                return TokenGenerator.EOF;
+                token = TokenGenerator.EOF;
+                break;
 
             // Separators
             case LexerTerminals.COLON:
@@ -94,7 +95,8 @@ public class BallerinaLexer {
 
             // Arithmetic operators
             case LexerTerminals.ASSIGN:
-                return processEqualOperator();
+                token = processEqualOperator();
+                break;
             case LexerTerminals.ADD:
                 token = this.tokenGenerator.getPlus();
                 break;
@@ -122,13 +124,15 @@ public class BallerinaLexer {
             case '7':
             case '8':
             case '9':
-                return processNumericLiteral(startChar);
+                token = processNumericLiteral(startChar);
+                break;
 
             // Other
             case 0x9:
             case 0xD:
             case 0x20:
-                return processWhiteSpace(startChar);
+                token = processWhiteSpace(startChar);
+                break;
             case LexerTerminals.NEWLINE:
                 token = this.tokenGenerator.getNewline();
                 this.tracer.markNewLine();
@@ -138,9 +142,10 @@ public class BallerinaLexer {
             default:
                 append(startChar);
                 if (isIdentifierInitialChar(startChar)) {
-                    return processIdentifierOrKeyword();
+                    token = processIdentifierOrKeyword();
+                    break;
                 }
-                return processInvalidToken();
+                token = processInvalidToken();
         }
 
         return token;
@@ -158,18 +163,18 @@ public class BallerinaLexer {
                 if (peek() == LexerTerminals.ASSIGN) {
                     // this is '==='
                     consume();
-                    return this.tokenGenerator.REF_EQUAL();
+                    return this.tokenGenerator.getRefEqualOp();
                 } else {
                     // this is '=='
-                    return this.tokenGenerator.EQUAL();
+                    return this.tokenGenerator.getEqualOp();
                 }
             case LexerTerminals.GT:
                 // this is '==='
                 consume();
-                return this.tokenGenerator.EQUAL_GT();
+                return this.tokenGenerator.getEqualGreaterOp();
             default:
                 // this is '=='
-                return this.tokenGenerator.ASSIGN();
+                return this.tokenGenerator.getAssignOp();
         }
     }
 
@@ -194,14 +199,15 @@ public class BallerinaLexer {
     private Token processNumericLiteral(int startChar) {
         append(startChar);
 
-        if (isHexIndicator(startChar)) {
+        int nextChar = peek();
+        if (isHexIndicator(startChar, nextChar)) {
             return processHexIntLiteral();
         }
 
         TokenKind kind = TokenKind.INT_LITERAL;
         int len = 1;
         while (true) {
-            switch (peek()) {
+            switch (nextChar) {
                 case '.':
                 case 'e':
                 case 'E':
@@ -210,12 +216,13 @@ public class BallerinaLexer {
                     this.errorHandler.reportError(token, "I dont't know how to handle floats yet");
                     return token;
                 default:
-                    if (!isDigit(peek())) {
-                        break;
+                    if (isDigit(nextChar)) {
+                        consumeAndAppend();
+                        len++;
+                        nextChar = peek();
+                        continue;
                     }
-                    consumeAndAppend();
-                    len++;
-                    continue;
+                    break;
             }
             break;
         }
@@ -270,6 +277,17 @@ public class BallerinaLexer {
                 return this.tokenGenerator.getPublic();
             case LexerTerminals.FUNCTION:
                 return this.tokenGenerator.getFunction();
+            case LexerTerminals.INT:
+            case LexerTerminals.FLOAT:
+            case LexerTerminals.STRING:
+            case LexerTerminals.BOOLEAN:
+                return this.tokenGenerator.getType(tokenText);
+            case LexerTerminals.RETURN:
+                return this.tokenGenerator.getReturn();
+            case LexerTerminals.RETURNS:
+                return this.tokenGenerator.getReturns();
+            case LexerTerminals.EXTERNAL:
+                return this.tokenGenerator.getExternal();
             default:
                 return this.tokenGenerator.getIdentifier(tokenText);
         }
@@ -410,12 +428,13 @@ public class BallerinaLexer {
      * </p>
      * <code>HexIndicator := 0x | 0X</code>
      * 
-     * @param startChar starting character of the literal
+     * @param startChar Starting character of the literal
+     * @param nextChar Second character of the literal
      * @return <code>true</code>, if the current input points to a start of a hex-numeric literal.
      *         <code>false</code> otherwise.
      */
-    private boolean isHexIndicator(int startChar) {
-        return startChar == '0' && (peek() == 'x') || peek() == 'X';
+    private boolean isHexIndicator(int startChar, int nextChar) {
+        return startChar == '0' && (nextChar == 'x' || nextChar == 'X');
     }
 
     /**
@@ -460,7 +479,7 @@ public class BallerinaLexer {
     }
 
     /**
-     * Consume the next character and append it to the currently processing token.
+     * Consume the next character from the input and append it to the currently processing token.
      */
     private void consumeAndAppend() {
         this.sb.append((char) consume());
@@ -479,7 +498,7 @@ public class BallerinaLexer {
     }
 
     /**
-     * Reader that can reads from a given input.
+     * Reader that can read characters from a given input source.
      * 
      * @since 1.2.0
      */
@@ -487,10 +506,11 @@ public class BallerinaLexer {
 
         private Reader reader;
         private int nextChar;
-        private boolean peaked = false;
+        private boolean peeked = false;
 
         InputReader(InputStream inputStream) {
-            this.reader = new InputStreamReader(inputStream, StandardCharsets.UTF_8);
+            // Wrapping with a buffered reader for efficiency.
+            this.reader = new BufferedReader(new InputStreamReader(inputStream, StandardCharsets.UTF_8));
         }
 
         InputReader(String source) {
@@ -504,24 +524,24 @@ public class BallerinaLexer {
          * @throws IOException
          */
         public int read() throws IOException {
-            if (this.peaked) {
-                this.peaked = false;
+            if (this.peeked) {
+                this.peeked = false;
                 return this.nextChar;
             }
             return this.reader.read();
         }
 
         /**
-         * Lookup ahead in the input and returns the next character. This will not consume the input.
+         * Lookahead in the input and returns the next character. This will not consume the input.
          * That means calling this method multiple times will return the same result.
          * 
          * @return Next character in the input
          * @throws IOException
          */
         public int peek() throws IOException {
-            if (!this.peaked) {
+            if (!this.peeked) {
                 this.nextChar = this.reader.read();
-                this.peaked = true;
+                this.peeked = true;
             }
             return this.nextChar;
         }

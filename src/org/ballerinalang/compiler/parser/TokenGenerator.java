@@ -38,6 +38,18 @@ public class TokenGenerator {
         return newToken(LexerTerminals.FUNCTION, TokenKind.FUNCTION);
     }
 
+    public Token getReturn() {
+        return newToken(LexerTerminals.RETURN, TokenKind.RETURN);
+    }
+
+    public Token getReturns() {
+        return newToken(LexerTerminals.RETURNS, TokenKind.RETURNS);
+    }
+
+    public Token getExternal() {
+        return newToken(LexerTerminals.EXTERNAL, TokenKind.EXTERNAL);
+    }
+    
     public Token getColon() {
         return newToken(":", TokenKind.COLON);
     }
@@ -78,7 +90,7 @@ public class TokenGenerator {
         return newToken("]", TokenKind.RIGHT_BRACKET);
     }
 
-    public Token ASSIGN() {
+    public Token getAssignOp() {
         return newToken("=", TokenKind.ASSIGN);
     }
 
@@ -102,15 +114,15 @@ public class TokenGenerator {
         return newToken("%", TokenKind.MOD);
     }
 
-    public Token EQUAL() {
+    public Token getEqualOp() {
         return newToken("==", TokenKind.EQUAL);
     }
 
-    public Token REF_EQUAL() {
+    public Token getRefEqualOp() {
         return newToken("===", TokenKind.REF_EQUAL);
     }
 
-    public Token EQUAL_GT() {
+    public Token getEqualGreaterOp() {
         return newToken("=>", TokenKind.EQUAL_GT);
     }
 
@@ -140,5 +152,9 @@ public class TokenGenerator {
 
     public Token getInvalidToken(String text) {
         return newToken(text, TokenKind.INVALID);
+    }
+
+    public Token getType(String typeName) {
+        return newToken(typeName, TokenKind.TYPE);
     }
 }

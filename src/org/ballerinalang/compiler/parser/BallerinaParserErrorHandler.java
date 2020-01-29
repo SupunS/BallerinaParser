@@ -20,6 +20,6 @@ package org.ballerinalang.compiler.parser;
 public class BallerinaParserErrorHandler {
 
     public void reportError(Token token, String message) {
-//        System.out.println(message);
+        System.out.println("xxx.bal:" + token.line + ":" + token.startCol + ":" + message);
     }
 }

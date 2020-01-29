@@ -22,6 +22,15 @@ public class LexerTerminals {
     // Keywords
     public static final String PUBLIC = "public";
     public static final String FUNCTION = "function";
+    public static final String RETURN = "return";
+    public static final String RETURNS = "returns";
+    public static final String EXTERNAL = "external";
+
+    // Types
+    public static final String INT = "int";
+    public static final String FLOAT = "float";
+    public static final String STRING = "string";
+    public static final String BOOLEAN = "boolean";
 
     // Separators
     public static final char SEMICOLON = ';';
@@ -46,5 +55,5 @@ public class LexerTerminals {
     public static final char LT = '>';
 
     // Other
-    public static final char NEWLINE = '\n';     // equivalent to 0xA
+    public static final char NEWLINE = '\n'; // equivalent to 0xA
 }

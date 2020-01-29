@@ -15,47 +15,18 @@
  * specific language governing permissions and limitations
  * under the License.
  */
-package org.ballerinalang.compiler.parser;
+package org.ballerinalang.compiler.parser.tree;
 
-public enum TokenKind {
-    EOF,
-    PUBLIC,
-    PRIVATE,
-    FUNCTION,
-    IDENTIFIER,
+public class ReturnTypeDescNode extends ASTNode {
 
-    COLON,
-    SEMICOLON,
-    DOT,
-    COMMA,
-    LEFT_PARANTHESIS,
-    RIGHT_PARANTHESIS,
-    LEFT_BRACE,
-    RIGHT_BRACE,
-    LEFT_BRACKET,
-    RIGHT_BRACKET,
+    public ASTNode type;
+    public ASTNode annot;
 
-    WHITE_SPACE,
-    NEWLINE,
-    INVALID,
+    public ReturnTypeDescNode() {
+    }
 
-    INT_LITERAL,
-    FLOAT_LITERAL,
-    HEX_LITERAL,
-
-    // Arithmetic operators
-    ASSIGN,
-    ADD,
-    SUB,
-    MUL,
-    DIV,
-    MOD,
-    GT,
-    LT,
-
-    EQUAL,
-    REF_EQUAL,
-    EQUAL_GT,
-
-    TYPE, RETURN, RETURNS, EXTERNAL;
+    @Override
+    public String toString() {
+        return " returns " + type;
+    }
 }
