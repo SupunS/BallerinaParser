@@ -19,29 +19,39 @@ package org.ballerinalang.compiler.parser;
 
 import org.ballerinalang.compiler.parser.tree.ASTNode;
 import org.ballerinalang.compiler.parser.tree.EmptyNode;
-import org.ballerinalang.compiler.parser.tree.ErrorNode;
+import org.ballerinalang.compiler.parser.tree.InvalidNode;
 import org.ballerinalang.compiler.parser.tree.ExternFuncBodyNode;
 import org.ballerinalang.compiler.parser.tree.FuncBodyNode;
 import org.ballerinalang.compiler.parser.tree.FunctionNode;
 import org.ballerinalang.compiler.parser.tree.IdentifierNode;
+import org.ballerinalang.compiler.parser.tree.MissingNode;
+import org.ballerinalang.compiler.parser.tree.ModifierNode;
 import org.ballerinalang.compiler.parser.tree.ParametersNode;
 import org.ballerinalang.compiler.parser.tree.ReturnTypeDescNode;
 import org.ballerinalang.compiler.parser.tree.TypeNode;
 
 import java.util.ArrayDeque;
+import java.util.ArrayList;
+import java.util.List;
 
 public class BallerinaParserListener {
 
-    ArrayDeque<ASTNode> nodesStack = new ArrayDeque<>();
+    private final ArrayDeque<ASTNode> nodesStack = new ArrayDeque<>();
+
+    // TODO: make this a stack of lists (nested modifiers are possible)
+    private List<ASTNode> modifiersList = new ArrayList<>(2);
 
     public void exitCompUnit() {
-//        for(ASTNode node : this.nodesStack) {
-//            System.out.println(node);
-//            System.out.println();
-//        }
+        System.out.println("--------------------------------------");
+        while (!this.nodesStack.isEmpty()) {
+            System.out.println(this.nodesStack.removeLast());
+            System.out.println();
+        }
+        System.out.println("--------------------------------------");
     }
 
-    public void exitModifier() {
+    public void exitModifier(Token modifier) {
+        this.modifiersList.add(new ModifierNode(modifier));
     }
 
     public void exitFunctionDefinition() {
@@ -50,7 +60,10 @@ public class BallerinaParserListener {
         func.returnType = this.nodesStack.pop();
         func.parameters = this.nodesStack.pop();
         func.name = this.nodesStack.pop();
+        func.modifiers = this.modifiersList;
         this.nodesStack.push(func);
+
+        this.modifiersList = new ArrayList<>(2);
     }
 
     public void exitFunctionSignature() {
@@ -79,7 +92,7 @@ public class BallerinaParserListener {
 
     public void exitAnnotations() {
         // TODO:
-        this.exitEmptyNode();
+        this.addEmptyNode();
     }
 
     public void exitFunctionBody() {
@@ -102,13 +115,25 @@ public class BallerinaParserListener {
     }
 
     public void exitErrorNode() {
-        this.nodesStack.push(new ErrorNode());
+        this.nodesStack.push(new InvalidNode());
     }
 
-    public void exitEmptyNode() {
-        this.nodesStack.push(new EmptyNode());
+    public void exitErrorNode(String content) {
+        this.nodesStack.push(new InvalidNode(content));
     }
 
     public void exitParameter() {
+    }
+
+    public void addEmptyNode() {
+        this.nodesStack.push(new EmptyNode());
+    }
+
+    public void addMissingNode() {
+        this.nodesStack.push(new MissingNode());
+    }
+
+    public ASTNode getLastNode() {
+        return this.nodesStack.peek();
     }
 }

@@ -17,11 +17,15 @@
  */
 package org.ballerinalang.compiler.parser.tree;
 
-public class ErrorNode extends ASTNode {
-
-    @Override
-    public String toString() {
-        // TODO
-        return "ERROR";
-    }
+public enum NodeKind {
+    INVALID,
+    EMPTY,
+    MISSING,
+    FUNCTION,
+    IDENTIFIER,
+    MODIFIER,
+    PARAMETER,
+    PARAMETERS,
+    EXTERN_FUNC_BODY,
+    FUNCTION_BODY_BLOCK;
 }

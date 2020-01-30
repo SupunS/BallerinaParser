@@ -17,17 +17,22 @@
  */
 package org.ballerinalang.compiler.parser.tree;
 
-public class ExternFuncBodyNode extends ASTNode {
+public class InvalidNode extends ASTNode {
 
-    public ASTNode annotation;
+    String text;
 
-    public ExternFuncBodyNode(ASTNode annot) {
-        this.annotation = annot;
-        this.kind = NodeKind.EXTERN_FUNC_BODY;
+    public InvalidNode() {
+        this.text = "";
+        this.kind = NodeKind.INVALID;
+    }
+
+    public InvalidNode(String text) {
+        this.text = text;
     }
 
     @Override
     public String toString() {
-        return "=" + this.annotation + " external;";
+        // TODO
+        return "INVALID(" + text + ")";
     }
 }

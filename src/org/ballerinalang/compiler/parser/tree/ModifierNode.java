@@ -17,17 +17,18 @@
  */
 package org.ballerinalang.compiler.parser.tree;
 
-public class ExternFuncBodyNode extends ASTNode {
+import org.ballerinalang.compiler.parser.Token;
 
-    public ASTNode annotation;
+public class ModifierNode extends ASTNode {
+    Token value;
 
-    public ExternFuncBodyNode(ASTNode annot) {
-        this.annotation = annot;
-        this.kind = NodeKind.EXTERN_FUNC_BODY;
+    public ModifierNode(Token text) {
+        this.value = text;
+        this.kind = NodeKind.MODIFIER;
     }
 
     @Override
     public String toString() {
-        return "=" + this.annotation + " external;";
+        return value.text;
     }
 }

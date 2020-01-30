@@ -24,6 +24,7 @@ public class IdentifierNode extends ASTNode {
 
     public IdentifierNode(Token text) {
         this.value = text;
+        this.kind = NodeKind.IDENTIFIER;
     }
 
     @Override

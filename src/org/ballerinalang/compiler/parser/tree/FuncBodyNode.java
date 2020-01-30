@@ -26,6 +26,7 @@ public class FuncBodyNode extends ASTNode {
     public List<ASTNode> stmts = new ArrayList<>();
 
     public FuncBodyNode() {
+        this.kind = NodeKind.FUNCTION_BODY_BLOCK;
     }
 
     @Override

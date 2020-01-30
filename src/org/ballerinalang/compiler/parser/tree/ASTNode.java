@@ -18,6 +18,6 @@
 package org.ballerinalang.compiler.parser.tree;
 
 public abstract class ASTNode {
-
-    public Meta meta;
+    public NodeKind kind = NodeKind.INVALID;
+    public Trivia meta;
 }

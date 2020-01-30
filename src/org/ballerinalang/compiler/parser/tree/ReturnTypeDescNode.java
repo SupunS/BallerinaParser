@@ -27,6 +27,6 @@ public class ReturnTypeDescNode extends ASTNode {
 
     @Override
     public String toString() {
-        return " returns " + type;
+        return "returns " + type;
     }
 }

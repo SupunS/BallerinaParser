@@ -17,15 +17,36 @@
  */
 package org.ballerinalang.compiler.parser.tree;
 
+import java.util.ArrayList;
+import java.util.List;
+
 public class FunctionNode extends ASTNode {
     public ASTNode name;
     public ASTNode parameters;
     public ASTNode returnType;
     public ASTNode body;
+    public List<ASTNode> modifiers = new ArrayList<>();
+
+    public FunctionNode() {
+        this.kind = NodeKind.FUNCTION;
+    }
 
     @Override
     public String toString() {
         // TODO: use whitespace information
-        return "function " + this.name + this.parameters + this.returnType + this.body;
+        StringBuilder sj = new StringBuilder();
+        for (ASTNode modifier : modifiers) {
+            sj.append(modifier.toString() + " ");
+        }
+        sj.append("function ");
+        sj.append(this.name.toString());
+        sj.append(this.parameters.toString() + " ");
+
+        if (this.returnType.kind != NodeKind.EMPTY) {
+            sj.append(this.returnType.toString() + " ");
+        }
+
+        sj.append(this.body.toString());
+        return sj.toString();
     }
 }

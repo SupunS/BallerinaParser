@@ -32,7 +32,7 @@ public class TestParser {
 
     public static void main(String[] args) throws IOException {
         String path = "/Users/supun/eclipse-workspace-2019-09/BallerinaParser/src/test/test1.bal";
-        // String path = "/Users/supun/eclipse-workspace-2019-09/BallerinaParser/src/test/test2.bal";
+//         String path = "/Users/supun/eclipse-workspace-2019-09/BallerinaParser/src/test/test2.bal";
 
         // byte[] bytes = Files.readAllBytes(Paths.get(path));
         // String content = new String(bytes);
@@ -45,7 +45,7 @@ public class TestParser {
         BallerinaLexer lexer = new BallerinaLexer(is);
         BallerinaParser parser = new BallerinaParser(lexer);
         long sTime = System.currentTimeMillis();
-        parser.parseCompUnit();
+        parser.parse();
         System.out.println("Time: " + (System.currentTimeMillis() - sTime) / 1000.0);
         try {
             is.close();

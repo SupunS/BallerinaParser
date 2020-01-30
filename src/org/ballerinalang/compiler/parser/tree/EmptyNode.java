@@ -19,6 +19,10 @@ package org.ballerinalang.compiler.parser.tree;
 
 public class EmptyNode extends ASTNode {
 
+    public EmptyNode() {
+        this.kind = NodeKind.EMPTY;
+    }
+
     @Override
     public String toString() {
         return "";

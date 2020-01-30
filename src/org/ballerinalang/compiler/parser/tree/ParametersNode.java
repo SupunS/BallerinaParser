@@ -22,7 +22,12 @@ import java.util.List;
 import java.util.StringJoiner;
 
 public class ParametersNode extends ASTNode {
+
     List<ASTNode> parameters = new ArrayList<>();
+
+    public ParametersNode() {
+        this.kind = NodeKind.PARAMETERS;
+    }
 
     public void add(ASTNode param) {
         this.parameters.add(param);

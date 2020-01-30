@@ -17,7 +17,7 @@
  */
 package org.ballerinalang.compiler.parser.tree;
 
-public class Meta {
+public class Trivia {
 
     String whiteSpaces;
 
