@@ -213,7 +213,7 @@ public class BallerinaLexer {
                 case 'E':
                     // TODO: handle float
                     Token token = processInvalidToken();
-                    this.errorHandler.reportError(token, "I dont't know how to handle floats yet");
+                    this.errorHandler.reportMissingTokenError(token, "I dont't know how to handle floats yet");
                     return token;
                 default:
                     if (isDigit(nextChar)) {
@@ -229,7 +229,7 @@ public class BallerinaLexer {
 
         if (startChar == '0' && len > 1 && kind == TokenKind.INT_LITERAL) {
             Token token = processInvalidToken();
-            this.errorHandler.reportError(token, "invalid int literal. cannot start with '0'.");
+            this.errorHandler.reportMissingTokenError(token, "invalid int literal. cannot start with '0'.");
             return token;
         }
 

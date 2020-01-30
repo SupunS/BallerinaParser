@@ -20,6 +20,7 @@ package org.ballerinalang.compiler.parser;
 public class TokenGenerator {
 
     public static final Token EOF = new Token("EOF", TokenKind.EOF, -1, -1, -1);
+    public static final Token SOF = new Token("SOF", TokenKind.SOF, -1, -1, -1);
     private final PositionTracer tracer;
 
     public TokenGenerator(PositionTracer tracer) {

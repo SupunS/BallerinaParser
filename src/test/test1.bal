@@ -1,5 +1,5 @@
 
-public function 
+public function
 }
 
 public function foo hello (

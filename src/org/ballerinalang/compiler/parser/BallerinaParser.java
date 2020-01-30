@@ -109,21 +109,38 @@ public class BallerinaParser {
         }
     }
 
+    /*
+     * Private methods
+     */
+
+    private Token peek() {
+        return this.tokenReader.peekNonTrivia();
+    }
+
+    private Token consume() {
+        return this.tokenReader.consumeNonTrivia();
+    }
+
+    private boolean recover(Token token, ParserRuleContext currentContext) {
+        this.healer.recover(token, currentContext);
+        return true;
+    }
+
     /**
      * Parse a given input and returns the AST. Starts parsing from the top of a compilation unit.
      */
     private void parseCompUnit() {
-        Token token = this.tokenReader.peek();
+        Token token = peek();
         while (token.kind != TokenKind.EOF) {
             parseTopLevelNode();
-            token = this.tokenReader.peek();
+            token = peek();
         }
 
         this.listner.exitCompUnit();
     }
 
     private void parseTopLevelNode() {
-        Token token = this.tokenReader.peek();
+        Token token = peek();
         switch (token.kind) {
             case PUBLIC:
                 parseModifier();
@@ -141,7 +158,7 @@ public class BallerinaParser {
      * Parse access modifiers.
      */
     private void parseModifier() {
-        this.listner.exitModifier(this.tokenReader.consume());
+        this.listner.exitModifier(consume());
     }
 
     /**
@@ -150,7 +167,7 @@ public class BallerinaParser {
      * </code>
      */
     private void parseFunctionDefinition() {
-        this.tokenReader.consume(); // 'function' keyword. This is already verified
+        consume(); // 'function' keyword. This is already verified
 
         parseFunctionName();
         parseFunctionSignature();
@@ -160,9 +177,9 @@ public class BallerinaParser {
     }
 
     private void parseFunctionName() {
-        Token token = this.tokenReader.peek();
+        Token token = peek();
         if (token.kind == TokenKind.IDENTIFIER) {
-            this.listner.exitFunctionName(this.tokenReader.consume()); // function name
+            this.listner.exitFunctionName(consume()); // function name
             return;
         } else {
             recover(token, ParserRuleContext.FUNCTION_NAME);
@@ -186,9 +203,9 @@ public class BallerinaParser {
      * 
      */
     private void parseFunctionSignatureEnd() {
-        Token token = this.tokenReader.peek();
+        Token token = peek();
         if (token.kind == TokenKind.RIGHT_PARANTHESIS) {
-            this.tokenReader.consume(); // )
+            consume(); // )
         } else {
             recover(token, ParserRuleContext.FUNCTION_SIGNATURE_END);
         }
@@ -198,9 +215,9 @@ public class BallerinaParser {
      * 
      */
     private void parseFunctionSignatureStart() {
-        Token token = this.tokenReader.peek();
+        Token token = peek();
         if (token.kind == TokenKind.LEFT_PARANTHESIS) {
-            this.tokenReader.consume(); // (
+            consume(); // (
         } else {
             recover(token, ParserRuleContext.FUNCTION_SIGNATURE_START);
         }
@@ -224,11 +241,10 @@ public class BallerinaParser {
      * <code>return-type-descriptor := [ returns annots type-descriptor ]</code>
      */
     private void parseReturnTypeDescriptor() {
-        Token token = this.tokenReader.peek();
-
         // If the return type is not present, simply return
+        Token token = peek();
         if (token.kind == TokenKind.RETURNS) {
-            this.tokenReader.consume(); // 'returns' keyword
+            consume(); // 'returns' keyword
         } else {
             recover(token, ParserRuleContext.RETURN_TYPE_DESCRIPTOR);
             return;
@@ -259,15 +275,15 @@ public class BallerinaParser {
      * type-descriptor-reference := qualified-identifier</code>
      */
     private void parseTypeDescriptor() {
-        Token token = this.tokenReader.peek();
+        Token token = peek();
         if (token.kind == TokenKind.TYPE) {
-            Token type = this.tokenReader.consume(); // type descriptor
+            Token type = consume(); // type descriptor
             this.listner.exitTypeDescriptor(type);
         } else {
             recover(token, ParserRuleContext.TYPE_DESCRIPTOR);
         }
 
-        // TODO: only supports builtin types. Add others
+        // TODO: only supports built-in types. Add others.
     }
 
     /**
@@ -286,7 +302,7 @@ public class BallerinaParser {
      * </code>
      */
     private void parseFunctionBody() {
-        Token token = this.tokenReader.peek();
+        Token token = peek();
         switch (token.kind) {
             case ASSIGN:
                 parseExternalFunctionBody();
@@ -333,9 +349,9 @@ public class BallerinaParser {
      * 
      */
     private void parseFunctionBodyBlockEnd() {
-        Token token = this.tokenReader.peek();
+        Token token = peek();
         if (token.kind == TokenKind.RIGHT_BRACE) {
-            this.tokenReader.consume(); // }
+            consume(); // }
         } else {
             recover(token, ParserRuleContext.FUNCTION_BODY_BLOCK_END);
         }
@@ -345,9 +361,9 @@ public class BallerinaParser {
      * 
      */
     private void parseFunctionBodyBlockStart() {
-        Token token = this.tokenReader.peek();
+        Token token = peek();
         if (token.kind == TokenKind.LEFT_BRACE) {
-            this.tokenReader.consume(); // {
+            consume(); // {
         } else {
             recover(token, ParserRuleContext.FUNCTION_BODY_BLOCK_START);
         }
@@ -370,9 +386,9 @@ public class BallerinaParser {
      * 
      */
     private void parseStatementEnd() {
-        Token token = this.tokenReader.peek();
+        Token token = peek();
         if (token.kind == TokenKind.SEMICOLON) {
-            this.tokenReader.consume(); // ';' keyword
+            consume(); // ';' keyword
         } else {
             recover(token, ParserRuleContext.STATEMENT_END);
         }
@@ -382,9 +398,9 @@ public class BallerinaParser {
      * 
      */
     private void parseExternalFunctionBodyEnd() {
-        Token token = this.tokenReader.peek();
+        Token token = peek();
         if (token.kind == TokenKind.EXTERNAL) {
-            this.tokenReader.consume(); // 'external' keyword
+            consume(); // 'external' keyword
         } else {
             recover(token, ParserRuleContext.EXTERNAL_FUNCTION_BODY_END);
         }
@@ -394,16 +410,11 @@ public class BallerinaParser {
      * 
      */
     private void parseExternalFunctionBodyStart() {
-        Token token = this.tokenReader.peek();
+        Token token = peek();
         if (token.kind == TokenKind.ASSIGN) {
-            this.tokenReader.consume(); // =
+            consume(); // =
         } else {
             recover(token, ParserRuleContext.EXTERNAL_FUNCTION_BODY_START);
         }
-    }
-
-    private boolean recover(Token token, ParserRuleContext currentContext) {
-        this.healer.recover(token, currentContext);
-        return true;
     }
 }

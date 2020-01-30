@@ -71,7 +71,7 @@ public class ParserRecover {
                 recoverFunctionBodyBlockStart(nextToken);
                 break;
             case FUNCTION_BODY_BLOCK_END:
-                recoverFunctionBodyBlockEnd(nextToken);
+                recoverFunctionBodyBlockEnd();
                 break;
             case EXTERNAL_FUNCTION_BODY:
                 break;
@@ -79,7 +79,7 @@ public class ParserRecover {
                 recoverExternFunctionBodyStart(nextToken);
                 break;
             case STATEMENT_END:
-                recoverStatementEnd(nextToken);
+                recoverStatementEnd();
             case FUNCTION_BODY_BLOCK:
             case EXTERNAL_FUNCTION_BODY_END:
             case FUNCTION_SIGNATURE:
@@ -88,9 +88,45 @@ public class ParserRecover {
         }
     }
 
+    public void removeInvalidToken(Token nextToken) {
+        // This means no match is found for the current token.
+        // Then consume it and return an error node
+        this.errorHandler.reportInvalidToken(nextToken);
+        this.tokenReader.consumeNonTrivia();
+
+        // FIXME: add this error node to the tree
+        // this.listner.exitErrorNode(nextToken.text);
+    }
+
+    private void reportMissingTokenError(String message) {
+        Token currentToken = this.tokenReader.head();
+        this.errorHandler.reportMissingTokenError(currentToken, message);
+    }
+
     /**
+     * Prune the given token from the tree to eliminate any unexpected tokens.
+     * The given token is pruned only if this token is not expected in a upcoming rule.
+     * This way it decides whether this token is an extraneous token or the expected
+     * token at this current position is missing.
      * 
+     * If the token is pruned, then this will re-attempt to parse the current rule.
+     * 
+     * @param nextToken Token to be pruned.
+     * @param context Current parser rule context
+     * @return <code>true</code> if the token was pruned. <code>false</code> otherwise.
      */
+    private boolean prune(Token nextToken, ParserRuleContext context) {
+        if (hasMatchInFunction(nextToken, context)) {
+            return false;
+        }
+
+        // If the current token is not expected to be found in future, then
+        // remove this additional token and re-attempt parsing the same rule again.
+        removeInvalidToken(nextToken);
+        this.parser.parse(context);
+        return true;
+    }
+
     private void recoverReturnTypeDescriptor(Token nextToken) {
         if (prune(nextToken, ParserRuleContext.RETURN_TYPE_DESCRIPTOR)) {
             return;
@@ -99,36 +135,27 @@ public class ParserRecover {
         this.listner.addEmptyNode();
     }
 
-    /**
-     * 
-     */
     private void recoverTypeDescriptor(Token nextToken) {
         if (prune(nextToken, ParserRuleContext.TYPE_DESCRIPTOR)) {
             return;
         }
 
-        this.errorHandler.reportError(nextToken, "missing type descriptor");
+        reportMissingTokenError("missing type descriptor");
         this.listner.addMissingNode();
     }
 
-    /**
-     * @param nextToken
-     */
-    private void recoverStatementEnd(Token nextToken) {
+    private void recoverStatementEnd() {
         // Reaches here only if the ';' is missing. So no need to prune.
         // Simply log and continue;
-        this.errorHandler.reportError(nextToken, "missing ';'");
+        reportMissingTokenError("missing ';'");
     }
 
-    /**
-     * @param nextToken
-     */
     private void recoverExternFunctionBodyStart(Token nextToken) {
         if (prune(nextToken, ParserRuleContext.EXTERNAL_FUNCTION_BODY_START)) {
             return;
         }
 
-        this.errorHandler.reportError(nextToken, "missing '='");
+        reportMissingTokenError("missing '='");
     }
 
     private void recoverFunctionBodyBlockStart(Token nextToken) {
@@ -138,20 +165,17 @@ public class ParserRecover {
 
         // We come here if theres a matching rule ahead.
         // No need to add a node for this
-        this.errorHandler.reportError(nextToken, "missing {");
+        reportMissingTokenError("missing '{'");
 
     }
 
-    private void recoverFunctionBodyBlockEnd(Token nextToken) {
+    private void recoverFunctionBodyBlockEnd() {
         // Reaches here only if the '}' to end the function body block is missing.
         // So no need to prune. Simply log and continue;
-        this.errorHandler.reportError(nextToken, "missing }");
+        reportMissingTokenError("missing '}'");
 
     }
 
-    /**
-     * 
-     */
     private void recoverFunctionBody(Token nextToken) {
         if (hasMatchInFunction(nextToken, ParserRuleContext.EXTERNAL_FUNCTION_BODY)) {
             this.parser.parse(ParserRuleContext.EXTERNAL_FUNCTION_BODY);
@@ -174,41 +198,24 @@ public class ParserRecover {
 
         // We come here if there's a matching rule ahead.
         // So fill the tree for the expected function name, and continue the parsing.
-        this.errorHandler.reportError(nextToken, "missing function name");
+        reportMissingTokenError("missing function name");
         this.listner.addMissingNode();
-    }
-
-    /**
-     * @param nextToken
-     */
-    private boolean prune(Token nextToken, ParserRuleContext context) {
-        if (hasMatchInFunction(nextToken, context)) {
-            return false;
-        }
-
-        // If the current token is not expected to be found in future, then
-        // remove this additional token and re-attempt parsing the same rule again.
-        removeInvalidToken(nextToken);
-        this.parser.parse(context);
-        return true;
     }
 
     private void recoverFunctionSignatureStart(Token nextToken) {
         if (prune(nextToken, ParserRuleContext.FUNCTION_SIGNATURE_START)) {
             return;
         }
-        this.errorHandler.reportError(nextToken, "missing '('");
+        reportMissingTokenError("missing '('");
     }
 
     private void recoverFunctionSignatureEnd(Token nextToken) {
-        this.errorHandler.reportError(nextToken, "missing ')'");
+        if (prune(nextToken, ParserRuleContext.FUNCTION_SIGNATURE_END)) {
+            return;
+        }
+        reportMissingTokenError("missing ')'");
     }
 
-    /**
-     * @param nextToken
-     * @param currentContext
-     * @return
-     */
     private boolean hasMatchInFunction(Token nextToken, ParserRuleContext currentContext) {
 
         // TODO: Memoize - if the same token is already validated against the same rule,
@@ -297,18 +304,5 @@ public class ParserRecover {
 
         // Try the next rule
         return hasMatchInFunction(nextToken, nextContext);
-    }
-
-    /**
-     * @param nextToken
-     */
-    public void removeInvalidToken(Token nextToken) {
-        // This means no match is found for the current token.
-        // Then consume it and return an error node
-        this.errorHandler.reportError(nextToken, "invalid token '" + nextToken.text + "'");
-        this.tokenReader.consume();
-
-        // FIXME: add this error node to the tree
-        // this.listner.exitErrorNode(nextToken.text);
     }
 }

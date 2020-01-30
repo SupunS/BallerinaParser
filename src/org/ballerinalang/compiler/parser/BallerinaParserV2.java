@@ -117,7 +117,7 @@ public class BallerinaParserV2 {
                 parseFunctionDefinition();
                 break;
             default:
-                this.errorHandler.reportError(token, "Invalid token: " + token.text);
+                this.errorHandler.reportMissingTokenError(token, "Invalid token: " + token.text);
                 break;
         }
     }
@@ -155,7 +155,7 @@ public class BallerinaParserV2 {
     private void parseFunctionName() {
         Token token = peek();
         if (token.kind != TokenKind.IDENTIFIER) {
-            this.errorHandler.reportError(token, "Invalid token: " + token.text);
+            this.errorHandler.reportMissingTokenError(token, "Invalid token: " + token.text);
             if (!recover(ParserRuleContext.FUNCTION_NAME)) {
                 this.listner.exitErrorNode();
                 return;
@@ -175,7 +175,7 @@ public class BallerinaParserV2 {
     private void parseFunctionSignature() {
         Token token = peek();
         if (token.kind != TokenKind.LEFT_PARANTHESIS) {
-            this.errorHandler.reportError(token, "missing '('");
+            this.errorHandler.reportMissingTokenError(token, "missing '('");
             if (!recover(ParserRuleContext.FUNCTION_SIGNATURE_START)) {
                 this.listner.exitErrorNode();
                 return;
@@ -187,7 +187,7 @@ public class BallerinaParserV2 {
 
         token = peek();
         if (token.kind != TokenKind.RIGHT_PARANTHESIS) {
-            this.errorHandler.reportError(token, "missing ')'");
+            this.errorHandler.reportMissingTokenError(token, "missing ')'");
             if (!recover(ParserRuleContext.FUNCTION_SIGNATURE_START)) {
                 this.listner.exitErrorNode();
                 return;
@@ -255,7 +255,7 @@ public class BallerinaParserV2 {
     private void parseTypeDescriptor() {
         Token token = peek();
         if (token.kind != TokenKind.TYPE) {
-            this.errorHandler.reportError(token, "missing the type");
+            this.errorHandler.reportMissingTokenError(token, "missing the type");
             if (!recover(ParserRuleContext.TYPE_DESCRIPTOR)) {
                 this.listner.exitErrorNode();
                 return;
@@ -294,7 +294,7 @@ public class BallerinaParserV2 {
                 parseFunctionBodyBlock();
                 break;
             default:
-                this.errorHandler.reportError(token, "missing function definition");
+                this.errorHandler.reportMissingTokenError(token, "missing function definition");
                 if (!recover(ParserRuleContext.FUNCTION_BODY)) {
                     this.listner.exitErrorNode();
                     return;
@@ -320,7 +320,7 @@ public class BallerinaParserV2 {
 
         Token token = peek();
         if (token.kind != TokenKind.RIGHT_BRACE) {
-            this.errorHandler.reportError(token, "missing '}'");
+            this.errorHandler.reportMissingTokenError(token, "missing '}'");
             if (recover(ParserRuleContext.FUNCTION_BODY_BLOCK_START)) {
                 // if recovered, an error node is added consuming whatever that is wrong.
                 // continue from the next context.
@@ -347,7 +347,7 @@ public class BallerinaParserV2 {
         parseAnnotationsAttachment();
         Token token = peek();
         if (token.kind != TokenKind.EXTERNAL) {
-            this.errorHandler.reportError(token, "missing 'external'");
+            this.errorHandler.reportMissingTokenError(token, "missing 'external'");
             if (!recover(ParserRuleContext.EXTERNAL_FUNCTION_BODY_START)) {
                 this.listner.exitErrorNode();
                 return;

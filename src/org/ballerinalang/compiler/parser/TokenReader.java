@@ -26,6 +26,7 @@ public class TokenReader {
 
     private BallerinaLexer lexer;
     private Token nextToken;
+    private Token currentToken = TokenGenerator.SOF;
     private boolean peeked = false;
 
     TokenReader(BallerinaLexer lexer) {
@@ -37,12 +38,20 @@ public class TokenReader {
      * 
      * @return Next token in the input
      */
-    public Token readToken() {
+    public Token read() {
         if (this.peeked) {
             this.peeked = false;
+
+            // cache the head
+            this.currentToken = this.nextToken;
+
             return this.nextToken;
         }
-        return this.lexer.nextToken();
+
+        // cache the head
+        this.currentToken = this.lexer.nextToken();
+
+        return this.currentToken;
     }
 
     /**
@@ -51,7 +60,7 @@ public class TokenReader {
      * 
      * @return Next token in the input
      */
-    public Token peekToken() {
+    public Token peek() {
         if (!this.peeked) {
             this.nextToken = this.lexer.nextToken();
             this.peeked = true;
@@ -59,20 +68,41 @@ public class TokenReader {
         return this.nextToken;
     }
 
-    public Token consume() {
-        Token token = this.readToken();
-        while (token.kind == TokenKind.WHITE_SPACE || token.kind == TokenKind.NEWLINE) {
-            token = this.readToken();
+    public Token consumeNonTrivia() {
+        if (this.peeked) {
+            this.peeked = false;
+            this.currentToken = this.nextToken;
+        } else {
+            this.currentToken = this.lexer.nextToken();
         }
-        return token;
+
+        while (this.currentToken.kind == TokenKind.WHITE_SPACE || this.currentToken.kind == TokenKind.NEWLINE) {
+            this.currentToken = this.lexer.nextToken();
+        }
+
+        return this.currentToken;
     }
 
-    public Token peek() {
-        Token token = this.peekToken();
-        while (token.kind == TokenKind.WHITE_SPACE || token.kind == TokenKind.NEWLINE) {
-            this.readToken();
-            token = this.peekToken();
+    public Token peekNonTrivia() {
+        if (this.peeked) {
+            return this.nextToken;
         }
-        return token;
+
+        this.nextToken = this.lexer.nextToken();
+        while (this.nextToken.kind == TokenKind.WHITE_SPACE || this.nextToken.kind == TokenKind.NEWLINE) {
+            this.nextToken = this.lexer.nextToken();
+        }
+
+        this.peeked = true;
+        return this.nextToken;
+    }
+
+    /**
+     * Returns the current token. i.e: last consumed token.
+     * 
+     * @return The current token.
+     */
+    public Token head() {
+        return this.currentToken;
     }
 }

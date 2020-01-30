@@ -18,7 +18,8 @@
 package org.ballerinalang.compiler.parser;
 
 public enum TokenKind {
-    EOF,
+    EOF,    // end of file
+    SOF,    // start of file
     PUBLIC,
     PRIVATE,
     FUNCTION,

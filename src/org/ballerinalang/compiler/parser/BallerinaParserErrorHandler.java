@@ -19,7 +19,15 @@ package org.ballerinalang.compiler.parser;
 
 public class BallerinaParserErrorHandler {
 
-    public void reportError(Token token, String message) {
-        System.out.println("xxx.bal:" + token.line + ":" + token.startCol + ":" + message);
+    public void reportInvalidToken(Token token) {
+        logError(token.line, token.startCol, "invalid token '" + token.text + "'");
+    }
+
+    public void reportMissingTokenError(Token token, String message) {
+        logError(token.line, token.endCol, message);
+    }
+
+    private void logError(int line, int col, String message) {
+        System.out.println("xxx.bal:" + line + ":" + col + ":" + message);
     }
 }
