@@ -17,16 +17,24 @@
  */
 package org.ballerinalang.compiler.parser.tree;
 
-public enum NodeKind {
-    INVALID,
-    EMPTY,
-    MISSING,
-    FUNCTION,
-    IDENTIFIER,
-    MODIFIER,
-    PARAMETER,
-    PARAMETERS,
-    EXTERN_FUNC_BODY,
-    BLOCK_NODE,
-    VAR_DEF;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.StringJoiner;
+
+public class BlockNode extends ASTNode {
+
+    public List<ASTNode> stmts = new ArrayList<>();
+
+    public BlockNode() {
+        this.kind = NodeKind.BLOCK_NODE;
+    }
+
+    @Override
+    public String toString() {
+        StringJoiner sj = new StringJoiner("\n  ", " {\n  ", "\n}");
+        for (ASTNode stmt : this.stmts) {
+            sj.add(stmt.toString());
+        }
+        return sj.toString();
+    }
 }

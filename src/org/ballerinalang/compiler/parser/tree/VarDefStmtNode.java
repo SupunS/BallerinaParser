@@ -17,16 +17,21 @@
  */
 package org.ballerinalang.compiler.parser.tree;
 
-public enum NodeKind {
-    INVALID,
-    EMPTY,
-    MISSING,
-    FUNCTION,
-    IDENTIFIER,
-    MODIFIER,
-    PARAMETER,
-    PARAMETERS,
-    EXTERN_FUNC_BODY,
-    BLOCK_NODE,
-    VAR_DEF;
+public class VarDefStmtNode extends ASTNode {
+    public ASTNode type;
+    public ASTNode varName;
+    public ASTNode expr;
+
+    public VarDefStmtNode() {
+        this.kind = NodeKind.VAR_DEF;
+    }
+
+    @Override
+    public String toString() {
+        String val = this.type + " " + this.varName;
+        if (this.expr != null && this.expr.kind != NodeKind.EMPTY) {
+            val += " = " + this.expr;
+        }
+        return val + ";";
+    }
 }

@@ -24,6 +24,8 @@ public class ParserRecover {
     private final BallerinaParserErrorHandler errorHandler;
     private final BallerinaParser parser;
 
+    private ParserRuleContext parentContext = ParserRuleContext.COMP_UNIT;
+
     public ParserRecover(TokenReader tokenReader, BallerinaParserListener listner,
             BallerinaParserErrorHandler errorHandler, BallerinaParser parser) {
         this.tokenReader = tokenReader;
@@ -32,13 +34,12 @@ public class ParserRecover {
         this.parser = parser;
     }
 
-    public void recover(Token nextToken, ParserRuleContext context) {
-        if (nextToken.kind == TokenKind.EOF) {
-            this.listner.addMissingNode();
-            return;
-        }
+    public void setParentContext(ParserRuleContext context) {
+        this.parentContext = context;
+    }
 
-        switch (context) {
+    public void recover(Token nextToken, ParserRuleContext currentContext) {
+        switch (currentContext) {
             case ANNOTATION_ATTACHMENT:
                 break;
             case FUNCTION_BODY:
@@ -49,11 +50,11 @@ public class ParserRecover {
             case FUNCTION_NAME:
                 recoverFunctionName(nextToken);
                 break;
-            case FUNCTION_SIGNATURE_START:
-                recoverFunctionSignatureStart(nextToken);
+            case LEFT_PARANTHESIS:
+                recoverLeftParanthesis(nextToken);
                 break;
-            case FUNCTION_SIGNATURE_END:
-                recoverFunctionSignatureEnd(nextToken);
+            case RIGHT_PARANTHESIS:
+                recoverRightParanthesis(nextToken);
                 break;
             case PARAMETER:
                 break;
@@ -67,24 +68,33 @@ public class ParserRecover {
                 break;
             case COMP_UNIT:
                 break;
-            case FUNCTION_BODY_BLOCK_START:
-                recoverFunctionBodyBlockStart(nextToken);
+            case LEFT_BRACE:
+                recoverRightBrace(nextToken);
                 break;
-            case FUNCTION_BODY_BLOCK_END:
-                recoverFunctionBodyBlockEnd();
+            case RIGHT_BRACE:
+                recoverRightBrace();
                 break;
             case EXTERNAL_FUNCTION_BODY:
                 break;
-            case EXTERNAL_FUNCTION_BODY_START:
-                recoverExternFunctionBodyStart(nextToken);
+            case ASSIGN_OP:
+                recoverAssignOperator(nextToken);
                 break;
             case STATEMENT_END:
-                recoverStatementEnd();
+                recoverSemicolon();
+                break;
+            case VARIABLE_NAME:
+                recoverVariableName(nextToken);
+                break;
             case FUNCTION_BODY_BLOCK:
             case EXTERNAL_FUNCTION_BODY_END:
             case FUNCTION_SIGNATURE:
+            case STATEMENT:
+            case TOP_LEVEL_NODE:
+            case EXPRESSION:
             default:
-                break;
+                // Remove the token and continue, if we don't know to recover from it.
+                // This is a fail-safe.
+                removeInvalidToken(nextToken);
         }
     }
 
@@ -116,7 +126,7 @@ public class ParserRecover {
      * @return <code>true</code> if the token was pruned. <code>false</code> otherwise.
      */
     private boolean prune(Token nextToken, ParserRuleContext context) {
-        if (hasMatchInFunction(nextToken, context)) {
+        if (hasMatch(nextToken, context)) {
             return false;
         }
 
@@ -144,22 +154,22 @@ public class ParserRecover {
         this.listner.addMissingNode();
     }
 
-    private void recoverStatementEnd() {
+    private void recoverSemicolon() {
         // Reaches here only if the ';' is missing. So no need to prune.
         // Simply log and continue;
         reportMissingTokenError("missing ';'");
     }
 
-    private void recoverExternFunctionBodyStart(Token nextToken) {
-        if (prune(nextToken, ParserRuleContext.EXTERNAL_FUNCTION_BODY_START)) {
+    private void recoverAssignOperator(Token nextToken) {
+        if (prune(nextToken, ParserRuleContext.ASSIGN_OP)) {
             return;
         }
 
         reportMissingTokenError("missing '='");
     }
 
-    private void recoverFunctionBodyBlockStart(Token nextToken) {
-        if (prune(nextToken, ParserRuleContext.FUNCTION_BODY_BLOCK_START)) {
+    private void recoverRightBrace(Token nextToken) {
+        if (prune(nextToken, ParserRuleContext.LEFT_BRACE)) {
             return;
         }
 
@@ -169,7 +179,7 @@ public class ParserRecover {
 
     }
 
-    private void recoverFunctionBodyBlockEnd() {
+    private void recoverRightBrace() {
         // Reaches here only if the '}' to end the function body block is missing.
         // So no need to prune. Simply log and continue;
         reportMissingTokenError("missing '}'");
@@ -202,28 +212,108 @@ public class ParserRecover {
         this.listner.addMissingNode();
     }
 
-    private void recoverFunctionSignatureStart(Token nextToken) {
-        if (prune(nextToken, ParserRuleContext.FUNCTION_SIGNATURE_START)) {
+    private void recoverLeftParanthesis(Token nextToken) {
+        if (prune(nextToken, ParserRuleContext.LEFT_PARANTHESIS)) {
             return;
         }
         reportMissingTokenError("missing '('");
     }
 
-    private void recoverFunctionSignatureEnd(Token nextToken) {
-        if (prune(nextToken, ParserRuleContext.FUNCTION_SIGNATURE_END)) {
+    private void recoverRightParanthesis(Token nextToken) {
+        if (prune(nextToken, ParserRuleContext.RIGHT_PARANTHESIS)) {
             return;
         }
         reportMissingTokenError("missing ')'");
     }
 
-    private boolean hasMatchInFunction(Token nextToken, ParserRuleContext currentContext) {
+    private void recoverVariableName(Token nextToken) {
+        if (prune(nextToken, ParserRuleContext.VARIABLE_NAME)) {
+            return;
+        }
+
+        reportMissingTokenError("missing variable");
+        this.listner.addMissingNode();
+    }
+
+    /*
+     * hasMatch? methods
+     */
+
+    private boolean hasMatch(Token nextToken, ParserRuleContext currentContext) {
+
+        // TODO: We may have to define the limit to the look-ahead (a tolerance level).
+        // i.e: When to stop looking further ahead, and return.
+        // Because we don't want to keep looking for eternity, whether this extraneous/mismatching
+        // token is useful in future. If its not expected for the next x number of rules (or until
+        // rule x), we can terminate.
 
         // TODO: Memoize - if the same token is already validated against the same rule,
         // then return the result of the previous attempt.
 
+        switch (this.parentContext) {
+            case FUNCTION_DEFINITION:
+                return hasMatchInFunction(nextToken, currentContext);
+            case STATEMENT:
+                return hasMatchInStatement(nextToken, currentContext);
+            default:
+                break;
+        }
+        return false;
+    }
+
+    /**
+     * @param nextToken
+     * @param currentContext
+     * @return
+     */
+    private boolean hasMatchInStatement(Token nextToken, ParserRuleContext currentContext) {
         ParserRuleContext nextContext;
         switch (currentContext) {
-            case FUNCTION_SIGNATURE_START:
+            case TYPE_DESCRIPTOR:
+                if (nextToken.kind == TokenKind.TYPE) {
+                    return true;
+                }
+                nextContext = ParserRuleContext.VARIABLE_NAME;
+            case VARIABLE_NAME:
+                if (nextToken.kind == TokenKind.IDENTIFIER) {
+                    return true;
+                }
+                nextContext = ParserRuleContext.ASSIGN_OP;
+                break;
+            case ASSIGN_OP:
+                if (nextToken.kind == TokenKind.ASSIGN) {
+                    return true;
+                }
+                nextContext = ParserRuleContext.EXPRESSION;
+                break;
+            case EXPRESSION:
+                if (hasMatchInExpression(nextToken)) {
+                    return true;
+                }
+                nextContext = ParserRuleContext.STATEMENT_END;
+                break;
+            case STATEMENT_END:
+                return nextToken.kind == TokenKind.SEMICOLON;
+            default:
+                return false;
+        }
+        // Try the next rule
+        return hasMatchInStatement(nextToken, nextContext);
+    }
+
+    /**
+     * @param nextToken
+     * @return
+     */
+    private boolean hasMatchInExpression(Token nextToken) {
+        return nextToken.kind == TokenKind.INT_LITERAL || nextToken.kind == TokenKind.FLOAT_LITERAL ||
+                nextToken.kind == TokenKind.HEX_LITERAL;
+    }
+
+    private boolean hasMatchInFunction(Token nextToken, ParserRuleContext currentContext) {
+        ParserRuleContext nextContext;
+        switch (currentContext) {
+            case LEFT_PARANTHESIS:
                 if (nextToken.kind == TokenKind.LEFT_PARANTHESIS) {
                     return true;
                 }
@@ -232,12 +322,12 @@ public class ParserRecover {
                 break;
             case PARAMETER_LIST:
                 // TODO: if match, return the context
-                return hasMatchInFunction(nextToken, ParserRuleContext.PARAMETER);
+                nextContext = ParserRuleContext.PARAMETER;
             case PARAMETER:
                 // TODO: if match, return the context
-                nextContext = ParserRuleContext.FUNCTION_SIGNATURE_END;
+                nextContext = ParserRuleContext.RIGHT_PARANTHESIS;
                 break;
-            case FUNCTION_SIGNATURE_END:
+            case RIGHT_PARANTHESIS:
                 if (nextToken.kind == TokenKind.RIGHT_PARANTHESIS) {
                     return true;
                 }
@@ -259,23 +349,23 @@ public class ParserRecover {
                 if (hasMatchInFunction(nextToken, ParserRuleContext.EXTERNAL_FUNCTION_BODY)) {
                     return true;
                 }
-                nextContext = ParserRuleContext.FUNCTION_BODY_BLOCK_START;
+                nextContext = ParserRuleContext.LEFT_BRACE;
                 break;
             case FUNCTION_BODY_BLOCK:
-            case FUNCTION_BODY_BLOCK_START:
+            case LEFT_BRACE:
                 if (nextToken.kind == TokenKind.LEFT_BRACE) {
                     return true;
                 }
-                nextContext = ParserRuleContext.FUNCTION_BODY_BLOCK_END;
+                nextContext = ParserRuleContext.RIGHT_BRACE;
                 break;
-            case FUNCTION_BODY_BLOCK_END:
+            case RIGHT_BRACE:
                 return nextToken.kind == TokenKind.RIGHT_BRACE;
             case COMP_UNIT:
             case ANNOTATION_ATTACHMENT:
                 nextContext = ParserRuleContext.EXTERNAL_FUNCTION_BODY_END;
                 break;
             case EXTERNAL_FUNCTION_BODY:
-            case EXTERNAL_FUNCTION_BODY_START:
+            case ASSIGN_OP:
                 if (nextToken.kind == TokenKind.ASSIGN) {
                     return true;
                 }
@@ -293,7 +383,7 @@ public class ParserRecover {
                 if (nextToken.kind == TokenKind.IDENTIFIER) {
                     return true;
                 }
-                nextContext = ParserRuleContext.FUNCTION_SIGNATURE_START;
+                nextContext = ParserRuleContext.LEFT_PARANTHESIS;
                 break;
             case TOP_LEVEL_NODE:
             case FUNCTION_DEFINITION:

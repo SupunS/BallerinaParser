@@ -17,24 +17,18 @@
  */
 package org.ballerinalang.compiler.parser.tree;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.StringJoiner;
+import org.ballerinalang.compiler.parser.Token;
 
-public class FuncBodyNode extends ASTNode {
+public class LiteralNode extends ASTNode {
 
-    public List<ASTNode> stmts = new ArrayList<>();
+    Token value;
 
-    public FuncBodyNode() {
-        this.kind = NodeKind.FUNCTION_BODY_BLOCK;
+    public LiteralNode(Token name) {
+        this.value = name;
     }
 
     @Override
     public String toString() {
-        StringJoiner sj = new StringJoiner("\n", " {", "\n}");
-        for (ASTNode stmt : this.stmts) {
-            sj.add(stmt.toString());
-        }
-        return sj.toString();
+        return value.text;
     }
 }

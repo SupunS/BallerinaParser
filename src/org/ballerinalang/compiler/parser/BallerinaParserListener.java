@@ -20,8 +20,9 @@ package org.ballerinalang.compiler.parser;
 import org.ballerinalang.compiler.parser.tree.ASTNode;
 import org.ballerinalang.compiler.parser.tree.EmptyNode;
 import org.ballerinalang.compiler.parser.tree.InvalidNode;
+import org.ballerinalang.compiler.parser.tree.LiteralNode;
 import org.ballerinalang.compiler.parser.tree.ExternFuncBodyNode;
-import org.ballerinalang.compiler.parser.tree.FuncBodyNode;
+import org.ballerinalang.compiler.parser.tree.BlockNode;
 import org.ballerinalang.compiler.parser.tree.FunctionNode;
 import org.ballerinalang.compiler.parser.tree.IdentifierNode;
 import org.ballerinalang.compiler.parser.tree.MissingNode;
@@ -29,6 +30,7 @@ import org.ballerinalang.compiler.parser.tree.ModifierNode;
 import org.ballerinalang.compiler.parser.tree.ParametersNode;
 import org.ballerinalang.compiler.parser.tree.ReturnTypeDescNode;
 import org.ballerinalang.compiler.parser.tree.TypeNode;
+import org.ballerinalang.compiler.parser.tree.VarDefStmtNode;
 
 import java.util.ArrayDeque;
 import java.util.ArrayList;
@@ -37,6 +39,8 @@ import java.util.List;
 public class BallerinaParserListener {
 
     private final ArrayDeque<ASTNode> nodesStack = new ArrayDeque<>();
+    private List<ASTNode> statements = new ArrayList<>();
+    private ArrayDeque<ASTNode> expressionsStack = new ArrayDeque<>();
 
     // TODO: make this a stack of lists (nested modifiers are possible)
     private List<ASTNode> modifiersList = new ArrayList<>(2);
@@ -102,7 +106,12 @@ public class BallerinaParserListener {
     }
 
     public void exitFunctionBodyBlock() {
-        this.nodesStack.push(new FuncBodyNode());
+        BlockNode block = new BlockNode();
+        block.stmts = this.statements;
+        this.nodesStack.push(block);
+
+        // reset the statements
+        this.statements = new ArrayList<>();
     }
 
     public void exitExternalFunctionBody() {
@@ -135,5 +144,17 @@ public class BallerinaParserListener {
 
     public ASTNode getLastNode() {
         return this.nodesStack.peek();
+    }
+
+    public void exitVarDefStmt() {
+        VarDefStmtNode varDef = new VarDefStmtNode();
+        varDef.varName = this.nodesStack.pop();
+        varDef.type = this.nodesStack.pop();
+        varDef.expr = expressionsStack.isEmpty() ? new EmptyNode() : expressionsStack.pop();
+        this.statements.add(varDef);
+    }
+
+    public void exitLiteral(Token token) {
+        this.expressionsStack.push(new LiteralNode(token));
     }
 }
