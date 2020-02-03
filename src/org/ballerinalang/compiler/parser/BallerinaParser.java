@@ -175,7 +175,7 @@ public class BallerinaParser {
      */
     private void parseFunctionDefinition() {
         ParserRuleContext prevContext = this.parentContext;
-        switchMode(ParserRuleContext.FUNCTION_DEFINITION);
+        switchContext(ParserRuleContext.FUNCTION_DEFINITION);
 
         consume(); // 'function' keyword. This is already verified
 
@@ -185,7 +185,7 @@ public class BallerinaParser {
 
         this.listner.exitFunctionDefinition();
 
-        switchMode(prevContext);
+        switchContext(prevContext);
     }
 
     private void parseFunctionName() {
@@ -341,7 +341,7 @@ public class BallerinaParser {
      */
     private void parseFunctionBodyBlock() {
         parseLeftBrace();
-        parseStatements();
+        parseStatements();  // TODO: allow workers
         parseRightBrace();
         this.listner.exitFunctionBodyBlock();
     }
@@ -351,7 +351,7 @@ public class BallerinaParser {
      */
     private void parseStatements() {
         ParserRuleContext prevContext = this.parentContext;
-        switchMode(ParserRuleContext.STATEMENT);
+        switchContext(ParserRuleContext.STATEMENT);
 
         // TODO: parse statements/worker declrs
         Token token = peek();
@@ -360,7 +360,7 @@ public class BallerinaParser {
             token = peek();
         }
 
-        switchMode(prevContext);
+        switchContext(prevContext);
     }
 
     /**
@@ -518,7 +518,7 @@ public class BallerinaParser {
         }
     }
 
-    private void switchMode(ParserRuleContext context) {
+    private void switchContext(ParserRuleContext context) {
         this.parentContext = context;
         this.healer.setParentContext(context);
     }

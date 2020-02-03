@@ -107,7 +107,11 @@ public class BallerinaLexer {
                 token = this.tokenGenerator.getMutiplication();
                 break;
             case LexerTerminals.DIV:
-                token = this.tokenGenerator.getDivision();
+                if (peek() == LexerTerminals.DIV) {
+                    token = processComment();
+                } else {
+                    token = this.tokenGenerator.getDivision();
+                }
                 break;
             case LexerTerminals.MOD:
                 token = this.tokenGenerator.getModulus();
@@ -149,6 +153,23 @@ public class BallerinaLexer {
         }
 
         return token;
+    }
+
+    /**
+     * <p>
+     * Process comments.
+     * </p>
+     * <code>Comment := // AnyCharButNewline*
+     * </br>AnyCharButNewline := ^ 0xA</code>
+     * 
+     * @return A comment
+     */
+    private Token processComment() {
+        consume(); // consume the second '/' of the comment. This is already verified.
+        while (peek() != LexerTerminals.NEWLINE) {
+            consumeAndAppend();
+        }
+        return this.tokenGenerator.getComment(getCurrentTokenText());
     }
 
     /**
@@ -339,6 +360,8 @@ public class BallerinaLexer {
         switch (currentChar) {
             case LexerTerminals.NEWLINE:
             case LexerTerminals.SEMICOLON:
+                // TODO: add all separators (braces, parentheses, etc)
+                // TODO: add all operators (arithmetic, binary, etc)
                 return true;
             default:
                 return isWhiteSpace(currentChar);

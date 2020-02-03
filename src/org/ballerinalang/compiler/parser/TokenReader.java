@@ -76,7 +76,9 @@ public class TokenReader {
             this.currentToken = this.lexer.nextToken();
         }
 
-        while (this.currentToken.kind == TokenKind.WHITE_SPACE || this.currentToken.kind == TokenKind.NEWLINE) {
+        while (this.currentToken.kind == TokenKind.WHITE_SPACE ||
+                this.currentToken.kind == TokenKind.NEWLINE ||
+                this.nextToken.kind == TokenKind.COMMENT) {
             this.currentToken = this.lexer.nextToken();
         }
 
@@ -89,7 +91,9 @@ public class TokenReader {
         }
 
         this.nextToken = this.lexer.nextToken();
-        while (this.nextToken.kind == TokenKind.WHITE_SPACE || this.nextToken.kind == TokenKind.NEWLINE) {
+        while (this.nextToken.kind == TokenKind.WHITE_SPACE ||
+                this.nextToken.kind == TokenKind.NEWLINE ||
+                this.nextToken.kind == TokenKind.COMMENT) {
             this.nextToken = this.lexer.nextToken();
         }
 

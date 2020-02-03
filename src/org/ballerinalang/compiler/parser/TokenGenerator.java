@@ -50,7 +50,7 @@ public class TokenGenerator {
     public Token getExternal() {
         return newToken(LexerTerminals.EXTERNAL, TokenKind.EXTERNAL);
     }
-    
+
     public Token getColon() {
         return newToken(":", TokenKind.COLON);
     }
@@ -157,5 +157,9 @@ public class TokenGenerator {
 
     public Token getType(String typeName) {
         return newToken(typeName, TokenKind.TYPE);
+    }
+
+    public Token getComment(String text) {
+        return newToken(text, TokenKind.COMMENT);
     }
 }

@@ -25,20 +25,15 @@ import org.ballerinalang.compiler.parser.TokenKind;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Paths;
 
 public class TestParser {
 
     public static void main(String[] args) throws IOException {
         String path = "/Users/supun/eclipse-workspace-2019-09/BallerinaParser/src/test/test1.bal";
-//         String path = "/Users/supun/eclipse-workspace-2019-09/BallerinaParser/src/test/test2.bal";
+        // String path = "/Users/supun/eclipse-workspace-2019-09/BallerinaParser/src/test/test2.bal";
 
-        // byte[] bytes = Files.readAllBytes(Paths.get(path));
-        // String content = new String(bytes);
-
-        testParser(new FileInputStream(path));
-
+        FileInputStream is = new FileInputStream(path);
+        testParser(is);
     }
 
     private static void testParser(FileInputStream is) throws FileNotFoundException {
@@ -66,5 +61,20 @@ public class TestParser {
             token = lexer.nextToken();
         }
         System.out.println("Time: " + (System.currentTimeMillis() - sTime) / 1000.0);
+    }
+
+    private static void testANTLR4Parser(FileInputStream is) throws IOException {
+        // ANTLRInputStream ais = new ANTLRInputStream(is);
+        // ais.name = "xxx.bal";
+        // org.wso2.ballerinalang.compiler.parser.antlr4.BallerinaLexer lexer = new
+        // org.wso2.ballerinalang.compiler.parser.antlr4.BallerinaLexer(ais);
+        // lexer.removeErrorListeners();
+        //// lexer.addErrorListener(new BallerinaParserErrorListener(context, diagnosticSrc));
+        // CommonTokenStream tokenStream = new CommonTokenStream(lexer);
+        // org.wso2.ballerinalang.compiler.parser.antlr4.BallerinaParser parser = new
+        // org.wso2.ballerinalang.compiler.parser.antlr4.BallerinaParser(tokenStream);
+        //// parser.setErrorHandler(getErrorStrategy(diagnosticSrc));
+        //// parser.addParseListener(newListener(tokenStream, compUnit, diagnosticSrc));
+        // parser.compilationUnit();
     }
 }

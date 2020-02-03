@@ -20,11 +20,16 @@ package org.ballerinalang.compiler.parser;
 public enum TokenKind {
     EOF,    // end of file
     SOF,    // start of file
+
+    // keywords
     PUBLIC,
     PRIVATE,
     FUNCTION,
-    IDENTIFIER,
+    EXTERNAL,
+    RETURN,
+    RETURNS,
 
+    // Separators
     COLON,
     SEMICOLON,
     DOT,
@@ -36,10 +41,13 @@ public enum TokenKind {
     LEFT_BRACKET,
     RIGHT_BRACKET,
 
+    // Trivia
     WHITE_SPACE,
     NEWLINE,
     INVALID,
+    COMMENT,
 
+    // Literals
     INT_LITERAL,
     FLOAT_LITERAL,
     HEX_LITERAL,
@@ -53,10 +61,11 @@ public enum TokenKind {
     MOD,
     GT,
     LT,
-
     EQUAL,
     REF_EQUAL,
     EQUAL_GT,
 
-    TYPE, RETURN, RETURNS, EXTERNAL;
+    // Other
+    IDENTIFIER,
+    TYPE;
 }

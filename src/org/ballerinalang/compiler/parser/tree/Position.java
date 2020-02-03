@@ -18,8 +18,5 @@
 package org.ballerinalang.compiler.parser.tree;
 
 public class Position {
-    int startLine;
-    int endLine;
-    int startCol;
-    int endCol;
+    int width;
 }

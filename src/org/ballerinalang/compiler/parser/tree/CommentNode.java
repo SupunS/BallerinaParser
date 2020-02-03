@@ -17,9 +17,18 @@
  */
 package org.ballerinalang.compiler.parser.tree;
 
-public class Trivia {
+import org.ballerinalang.compiler.parser.Token;
 
-    ASTNode whiteSpaces;
+public class CommentNode extends ASTNode {
 
-    Position pos;
+    Token value;
+
+    public CommentNode(Token name) {
+        this.value = name;
+    }
+
+    @Override
+    public String toString() {
+        return value.text;
+    }
 }
