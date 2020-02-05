@@ -109,6 +109,8 @@ public class BallerinaParser {
                 parseVariableName();
                 break;
             case EXPRESSION:
+                parseExpression();
+                break;
             case STATEMENT:
             case TOP_LEVEL_NODE:
             default:
@@ -432,10 +434,11 @@ public class BallerinaParser {
             case INT_LITERAL:
             case HEX_LITERAL:
                 parseLiteral();
+                break;
             default:
-
+                recover(token, ParserRuleContext.EXPRESSION);
+                break;
         }
-
     }
 
     /**

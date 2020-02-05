@@ -23,12 +23,12 @@ public class CommentNode extends ASTNode {
 
     Token value;
 
-    public CommentNode(Token name) {
-        this.value = name;
+    public CommentNode(Token text) {
+        this.value = text;
     }
 
     @Override
     public String toString() {
-        return value.text;
+        return "//" + value.text;
     }
 }

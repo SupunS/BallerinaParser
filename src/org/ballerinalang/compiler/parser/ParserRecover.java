@@ -85,12 +85,14 @@ public class ParserRecover {
             case VARIABLE_NAME:
                 recoverVariableName(nextToken);
                 break;
+            case EXPRESSION:
+                recoverExpression(nextToken);
+                break;
             case FUNCTION_BODY_BLOCK:
             case EXTERNAL_FUNCTION_BODY_END:
             case FUNCTION_SIGNATURE:
             case STATEMENT:
             case TOP_LEVEL_NODE:
-            case EXPRESSION:
             default:
                 // Remove the token and continue, if we don't know to recover from it.
                 // This is a fail-safe.
@@ -235,6 +237,14 @@ public class ParserRecover {
         this.listner.addMissingNode();
     }
 
+    private void recoverExpression(Token nextToken) {
+        if (prune(nextToken, ParserRuleContext.EXPRESSION)) {
+            return;
+        }
+
+        reportMissingTokenError("missing expression");
+    }
+
     /*
      * hasMatch? methods
      */
@@ -274,6 +284,7 @@ public class ParserRecover {
                     return true;
                 }
                 nextContext = ParserRuleContext.VARIABLE_NAME;
+                break;
             case VARIABLE_NAME:
                 if (nextToken.kind == TokenKind.IDENTIFIER) {
                     return true;
@@ -293,12 +304,34 @@ public class ParserRecover {
                 nextContext = ParserRuleContext.STATEMENT_END;
                 break;
             case STATEMENT_END:
-                return nextToken.kind == TokenKind.SEMICOLON;
+                if (nextToken.kind == TokenKind.SEMICOLON) {
+                    return true;
+                }
+                // else check whether a block has ended
+                return isEndOfBlock(nextToken);
             default:
                 return false;
         }
         // Try the next rule
         return hasMatchInStatement(nextToken, nextContext);
+    }
+
+    /**
+     * TODO: This is a duplicate method. Same as {@link BallerinaParser#isEndOfBlock}
+     * 
+     * @param token
+     * @return
+     */
+    private boolean isEndOfBlock(Token token) {
+        switch (token.kind) {
+            case RIGHT_BRACE:
+            case PUBLIC:
+            case FUNCTION:
+            case EOF:
+                return true;
+            default:
+                return false;
+        }
     }
 
     /**
