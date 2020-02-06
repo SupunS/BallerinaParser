@@ -20,14 +20,16 @@ package org.ballerinalang.compiler.parser.tree;
 public class ExternFuncBodyNode extends ASTNode {
 
     public ASTNode annotation;
+    public ASTNode assign;
+    public ASTNode externalKeyword;
+    public ASTNode semicolon;
 
-    public ExternFuncBodyNode(ASTNode annot) {
-        this.annotation = annot;
+    public ExternFuncBodyNode() {
         this.kind = NodeKind.EXTERN_FUNC_BODY;
     }
 
     @Override
     public String toString() {
-        return "=" + this.annotation + " external;";
+        return this.assign.toString() + this.annotation + " " + this.externalKeyword + this.semicolon;
     }
 }

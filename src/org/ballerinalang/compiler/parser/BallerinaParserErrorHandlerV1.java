@@ -17,17 +17,17 @@
  */
 package org.ballerinalang.compiler.parser;
 
-public class ParserRecover {
+public class BallerinaParserErrorHandlerV1 {
 
     private final TokenReader tokenReader;
     private final BallerinaParserListener listner;
-    private final BallerinaParserErrorHandler errorHandler;
+    private final BallerinaParserErrorHandlerV2 errorHandler;
     private final BallerinaParser parser;
 
     private ParserRuleContext parentContext = ParserRuleContext.COMP_UNIT;
 
-    public ParserRecover(TokenReader tokenReader, BallerinaParserListener listner,
-            BallerinaParserErrorHandler errorHandler, BallerinaParser parser) {
+    public BallerinaParserErrorHandlerV1(TokenReader tokenReader, BallerinaParserListener listner,
+            BallerinaParserErrorHandlerV2 errorHandler, BallerinaParser parser) {
         this.tokenReader = tokenReader;
         this.listner = listner;
         this.errorHandler = errorHandler;

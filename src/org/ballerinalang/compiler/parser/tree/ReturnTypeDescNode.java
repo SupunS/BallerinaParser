@@ -19,6 +19,7 @@ package org.ballerinalang.compiler.parser.tree;
 
 public class ReturnTypeDescNode extends ASTNode {
 
+    public ASTNode returnsKeyword;
     public ASTNode type;
     public ASTNode annot;
 
@@ -27,6 +28,6 @@ public class ReturnTypeDescNode extends ASTNode {
 
     @Override
     public String toString() {
-        return "returns " + type;
+        return this.returnsKeyword + " " + this.type;
     }
 }

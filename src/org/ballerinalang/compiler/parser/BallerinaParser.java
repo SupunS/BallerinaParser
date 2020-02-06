@@ -21,26 +21,23 @@ import java.io.InputStream;
 
 public class BallerinaParser {
 
-    private final BallerinaParserErrorHandler errorHandler = new BallerinaParserErrorHandler();
     private final BallerinaParserListener listner = new BallerinaParserListener();
-    private final ParserRecover healer;
+    private final BallerinaParserErrorHandlerV2 errorHandler;
     private final TokenReader tokenReader;
 
     private ParserRuleContext parentContext = ParserRuleContext.COMP_UNIT;
 
     public BallerinaParser(BallerinaLexer lexer) {
         this.tokenReader = new TokenReader(lexer);
-        this.healer = new ParserRecover(tokenReader, listner, errorHandler, this);
+        this.errorHandler = new BallerinaParserErrorHandlerV2(tokenReader, listner, this);
     }
 
     public BallerinaParser(InputStream inputStream) {
-        this.tokenReader = new TokenReader(new BallerinaLexer(inputStream));
-        this.healer = new ParserRecover(tokenReader, listner, errorHandler, this);
+        this(new BallerinaLexer(inputStream));
     }
 
     public BallerinaParser(String source) {
-        this.tokenReader = new TokenReader(new BallerinaLexer(source));
-        this.healer = new ParserRecover(tokenReader, listner, errorHandler, this);
+        this(new BallerinaLexer(source));
     }
 
     public void parse() {
@@ -132,7 +129,7 @@ public class BallerinaParser {
     }
 
     private void recover(Token token, ParserRuleContext currentContext) {
-        this.healer.recover(token, currentContext);
+        this.errorHandler.recover(token, currentContext);
     }
 
     /**
@@ -158,7 +155,7 @@ public class BallerinaParser {
                 parseFunctionDefinition();
                 break;
             default:
-                this.healer.removeInvalidToken(token);
+                this.errorHandler.removeInvalidToken();
                 break;
         }
     }
@@ -179,7 +176,7 @@ public class BallerinaParser {
         ParserRuleContext prevContext = this.parentContext;
         switchContext(ParserRuleContext.FUNCTION_DEFINITION);
 
-        consume(); // 'function' keyword. This is already verified
+        this.listner.exitSyntaxNode(consume()); // 'function' keyword. This is already verified
 
         parseFunctionName();
         parseFunctionSignature();
@@ -194,7 +191,6 @@ public class BallerinaParser {
         Token token = peek();
         if (token.kind == TokenKind.IDENTIFIER) {
             this.listner.exitFunctionName(consume()); // function name
-            return;
         } else {
             recover(token, ParserRuleContext.FUNCTION_NAME);
         }
@@ -219,7 +215,7 @@ public class BallerinaParser {
     private void parseFunctionSignatureEnd() {
         Token token = peek();
         if (token.kind == TokenKind.RIGHT_PARANTHESIS) {
-            consume(); // )
+            this.listner.exitSyntaxNode(consume()); // )
         } else {
             recover(token, ParserRuleContext.RIGHT_PARANTHESIS);
         }
@@ -231,7 +227,7 @@ public class BallerinaParser {
     private void parseLeftParanthesis() {
         Token token = peek();
         if (token.kind == TokenKind.LEFT_PARANTHESIS) {
-            consume(); // (
+            this.listner.exitSyntaxNode(consume()); // (
         } else {
             recover(token, ParserRuleContext.LEFT_PARANTHESIS);
         }
@@ -258,9 +254,10 @@ public class BallerinaParser {
         // If the return type is not present, simply return
         Token token = peek();
         if (token.kind == TokenKind.RETURNS) {
-            consume(); // 'returns' keyword
+            this.listner.exitSyntaxNode(consume()); // 'returns' keyword
         } else {
-            recover(token, ParserRuleContext.RETURN_TYPE_DESCRIPTOR);
+            // recover(token, ParserRuleContext.RETURN_TYPE_DESCRIPTOR);
+            this.listner.addEmptyNode();
             return;
         }
 
@@ -291,8 +288,7 @@ public class BallerinaParser {
     private void parseTypeDescriptor() {
         Token token = peek();
         if (token.kind == TokenKind.TYPE) {
-            Token type = consume(); // type descriptor
-            this.listner.exitTypeDescriptor(type);
+            this.listner.exitTypeDescriptor(consume()); // type descriptor
         } else {
             recover(token, ParserRuleContext.TYPE_DESCRIPTOR);
         }
@@ -343,7 +339,7 @@ public class BallerinaParser {
      */
     private void parseFunctionBodyBlock() {
         parseLeftBrace();
-        parseStatements();  // TODO: allow workers
+        parseStatements(); // TODO: allow workers
         parseRightBrace();
         this.listner.exitFunctionBodyBlock();
     }
@@ -392,7 +388,7 @@ public class BallerinaParser {
                 parseVariableDefStmt();
                 break;
             default:
-                this.healer.removeInvalidToken(token);
+                this.errorHandler.removeInvalidToken();
                 break;
         }
     }
@@ -405,13 +401,15 @@ public class BallerinaParser {
         parseVariableName();
 
         Token token = peek();
+        boolean hasExpr = false;
         if (token.kind != TokenKind.SEMICOLON) {
             parseAssignOp();
             parseExpression();
+            hasExpr = true;
         }
 
         parseStatementEnd();
-        this.listner.exitVarDefStmt();
+        this.listner.exitVarDefStmt(hasExpr);
     }
 
     private void parseVariableName() {
@@ -454,7 +452,7 @@ public class BallerinaParser {
     private void parseRightBrace() {
         Token token = peek();
         if (token.kind == TokenKind.RIGHT_BRACE) {
-            consume(); // }
+            this.listner.exitSyntaxNode(consume()); // }
         } else {
             recover(token, ParserRuleContext.RIGHT_BRACE);
         }
@@ -466,7 +464,7 @@ public class BallerinaParser {
     private void parseLeftBrace() {
         Token token = peek();
         if (token.kind == TokenKind.LEFT_BRACE) {
-            consume(); // {
+            this.listner.exitSyntaxNode(consume()); // {
         } else {
             recover(token, ParserRuleContext.LEFT_BRACE);
         }
@@ -491,7 +489,7 @@ public class BallerinaParser {
     private void parseStatementEnd() {
         Token token = peek();
         if (token.kind == TokenKind.SEMICOLON) {
-            consume(); // ';'
+            this.listner.exitSyntaxNode(consume()); // ';'
         } else {
             recover(token, ParserRuleContext.STATEMENT_END);
         }
@@ -503,7 +501,7 @@ public class BallerinaParser {
     private void parseExternalFunctionBodyEnd() {
         Token token = peek();
         if (token.kind == TokenKind.EXTERNAL) {
-            consume(); // 'external' keyword
+            this.listner.exitSyntaxNode(consume()); // 'external' keyword
         } else {
             recover(token, ParserRuleContext.EXTERNAL_FUNCTION_BODY_END);
         }
@@ -515,7 +513,7 @@ public class BallerinaParser {
     private void parseAssignOp() {
         Token token = peek();
         if (token.kind == TokenKind.ASSIGN) {
-            consume(); // =
+            this.listner.exitSyntaxNode(consume()); // =
         } else {
             recover(token, ParserRuleContext.ASSIGN_OP);
         }
@@ -523,6 +521,6 @@ public class BallerinaParser {
 
     private void switchContext(ParserRuleContext context) {
         this.parentContext = context;
-        this.healer.setParentContext(context);
+        this.errorHandler.setEnclosingContext(context);
     }
 }

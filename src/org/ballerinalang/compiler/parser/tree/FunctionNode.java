@@ -21,8 +21,11 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class FunctionNode extends ASTNode {
+    public ASTNode functionKeyword;
     public ASTNode name;
+    public ASTNode leftParenthesis;
     public ASTNode parameters;
+    public ASTNode rightParenthesis;
     public ASTNode returnType;
     public ASTNode body;
     public List<ASTNode> modifiers = new ArrayList<>();

@@ -23,7 +23,9 @@ import java.util.StringJoiner;
 
 public class BlockNode extends ASTNode {
 
+    public ASTNode leftBrace;
     public List<ASTNode> stmts = new ArrayList<>();
+    public ASTNode rightBrace;
 
     public BlockNode() {
         this.kind = NodeKind.BLOCK_NODE;
@@ -31,7 +33,8 @@ public class BlockNode extends ASTNode {
 
     @Override
     public String toString() {
-        StringJoiner sj = new StringJoiner("\n  ", " {\n  ", "\n}");
+        StringJoiner sj = new StringJoiner("\n  ", "", "\n" + this.rightBrace.toString());
+        sj.add(this.leftBrace.toString());
         for (ASTNode stmt : this.stmts) {
             sj.add(stmt.toString());
         }

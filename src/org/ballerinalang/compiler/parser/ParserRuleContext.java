@@ -18,24 +18,39 @@
 package org.ballerinalang.compiler.parser;
 
 public enum ParserRuleContext {
-    COMP_UNIT,
-    FUNCTION_DEFINITION,
-    FUNCTION_NAME,
-    LEFT_PARANTHESIS,
-    RIGHT_PARANTHESIS,
-    PARAMETER_LIST,
-    PARAMETER,
-    RETURN_TYPE_DESCRIPTOR,
-    TYPE_DESCRIPTOR,
-    ANNOTATION_ATTACHMENT,
-    FUNCTION_BODY,
-    LEFT_BRACE,
-    RIGHT_BRACE,
-    EXTERNAL_FUNCTION_BODY,
-    ASSIGN_OP,
-    FUNCTION_SIGNATURE,
-    STATEMENT_END,
-    EXTERNAL_FUNCTION_BODY_END, 
-    FUNCTION_BODY_BLOCK,
-    TOP_LEVEL_NODE, STATEMENT, VARIABLE_NAME, EXPRESSION;
+    COMP_UNIT(null),
+    FUNCTION_DEFINITION(null),
+    FUNCTION_NAME("function name"),
+    LEFT_PARANTHESIS("("),
+    RIGHT_PARANTHESIS(")"),
+    PARAMETER_LIST("parameters"),
+    PARAMETER("parameter"),
+    RETURN_TYPE_DESCRIPTOR("return type"),
+    TYPE_DESCRIPTOR("type"),
+    ANNOTATION_ATTACHMENT("annotation"),
+    FUNCTION_BODY("function body"),
+    LEFT_BRACE("{"),
+    RIGHT_BRACE("}"),
+    EXTERNAL_FUNCTION_BODY("external function body"),
+    ASSIGN_OP("="),
+    FUNCTION_SIGNATURE("function signature"),
+    STATEMENT_END(";"),
+    EXTERNAL_FUNCTION_BODY_END(";"), 
+    FUNCTION_BODY_BLOCK("function body"),
+    TOP_LEVEL_NODE(null),
+    STATEMENT(null),
+    VARIABLE_NAME("variable"),
+    EXPRESSION("expression");
+
+    private String value;
+
+    ParserRuleContext(String value) {
+        this.value = value;
+    }
+
+    @Override
+    public String toString() {
+        return value;
+    }
+
 }

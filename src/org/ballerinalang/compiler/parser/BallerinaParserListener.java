@@ -29,6 +29,7 @@ import org.ballerinalang.compiler.parser.tree.MissingNode;
 import org.ballerinalang.compiler.parser.tree.ModifierNode;
 import org.ballerinalang.compiler.parser.tree.ParametersNode;
 import org.ballerinalang.compiler.parser.tree.ReturnTypeDescNode;
+import org.ballerinalang.compiler.parser.tree.SyntaxNode;
 import org.ballerinalang.compiler.parser.tree.TypeNode;
 import org.ballerinalang.compiler.parser.tree.VarDefStmtNode;
 
@@ -40,7 +41,6 @@ public class BallerinaParserListener {
 
     private final ArrayDeque<ASTNode> nodesStack = new ArrayDeque<>();
     private List<ASTNode> statements = new ArrayList<>();
-    private ArrayDeque<ASTNode> expressionsStack = new ArrayDeque<>();
 
     // TODO: make this a stack of lists (nested modifiers are possible)
     private List<ASTNode> modifiersList = new ArrayList<>(2);
@@ -62,8 +62,11 @@ public class BallerinaParserListener {
         FunctionNode func = new FunctionNode();
         func.body = this.nodesStack.pop();
         func.returnType = this.nodesStack.pop();
+        func.leftParenthesis = this.nodesStack.pop();
         func.parameters = this.nodesStack.pop();
+        func.rightParenthesis = this.nodesStack.pop();
         func.name = this.nodesStack.pop();
+        func.functionKeyword = this.nodesStack.pop();
         func.modifiers = this.modifiersList;
         this.nodesStack.push(func);
 
@@ -87,6 +90,7 @@ public class BallerinaParserListener {
         ReturnTypeDescNode returnTypeDesc = new ReturnTypeDescNode();
         returnTypeDesc.type = this.nodesStack.pop();
         returnTypeDesc.annot = this.nodesStack.pop();
+        returnTypeDesc.returnsKeyword = this.nodesStack.pop();
         this.nodesStack.push(returnTypeDesc);
     }
 
@@ -107,7 +111,10 @@ public class BallerinaParserListener {
 
     public void exitFunctionBodyBlock() {
         BlockNode block = new BlockNode();
+        block.rightBrace = this.nodesStack.pop();
         block.stmts = this.statements;
+        block.leftBrace = this.nodesStack.pop();
+
         this.nodesStack.push(block);
 
         // reset the statements
@@ -115,8 +122,12 @@ public class BallerinaParserListener {
     }
 
     public void exitExternalFunctionBody() {
-        ASTNode annot = this.nodesStack.pop();
-        this.nodesStack.push(new ExternFuncBodyNode(annot));
+        ExternFuncBodyNode externFunc = new ExternFuncBodyNode();
+        externFunc.semicolon = this.nodesStack.pop();
+        externFunc.externalKeyword = this.nodesStack.pop();
+        externFunc.annotation = this.nodesStack.pop();
+        externFunc.assign = this.nodesStack.pop();
+        this.nodesStack.push(externFunc);
     }
 
     public void exitFunctionName(Token name) {
@@ -142,19 +153,36 @@ public class BallerinaParserListener {
         this.nodesStack.push(new MissingNode());
     }
 
+    public void addMissingNode(String text) {
+        this.nodesStack.push(new MissingNode(text));
+    }
+
     public ASTNode getLastNode() {
         return this.nodesStack.peek();
     }
 
-    public void exitVarDefStmt() {
+    public void exitSyntaxNode(Token content) {
+        this.nodesStack.push(new SyntaxNode(content));
+    }
+
+    public void exitVarDefStmt(boolean hasExpr) {
         VarDefStmtNode varDef = new VarDefStmtNode();
+        varDef.semicolon = this.nodesStack.pop();
+
+        if (hasExpr) {
+            varDef.expr = this.nodesStack.pop();
+            varDef.assign = this.nodesStack.pop();
+        } else {
+            varDef.expr = new EmptyNode();
+            varDef.assign = new EmptyNode();
+        }
+
         varDef.varName = this.nodesStack.pop();
         varDef.type = this.nodesStack.pop();
-        varDef.expr = expressionsStack.isEmpty() ? new EmptyNode() : expressionsStack.pop();
         this.statements.add(varDef);
     }
 
     public void exitLiteral(Token token) {
-        this.expressionsStack.push(new LiteralNode(token));
+        this.nodesStack.push(new LiteralNode(token));
     }
 }

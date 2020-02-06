@@ -20,7 +20,9 @@ package org.ballerinalang.compiler.parser.tree;
 public class VarDefStmtNode extends ASTNode {
     public ASTNode type;
     public ASTNode varName;
+    public ASTNode assign;
     public ASTNode expr;
+    public ASTNode semicolon;
 
     public VarDefStmtNode() {
         this.kind = NodeKind.VAR_DEF;
@@ -30,8 +32,8 @@ public class VarDefStmtNode extends ASTNode {
     public String toString() {
         String val = this.type + " " + this.varName;
         if (this.expr != null && this.expr.kind != NodeKind.EMPTY) {
-            val += " = " + this.expr;
+            val += " " + assign + " " + this.expr;
         }
-        return val + ";";
+        return val + this.semicolon;
     }
 }

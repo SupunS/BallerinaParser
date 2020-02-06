@@ -1,10 +1,4 @@
 
-public function
-}
-
-public function foo hello (
-}
-
 public function } bbb1() returns int {
 
 
@@ -45,7 +39,7 @@ public function ggg1() returns int {
 
 
 public function ggg2() returns int {
-    int a=2;
+    int a= b 2;
     // some comment
     int a 9;
     int b;4;
@@ -56,4 +50,8 @@ public function ggg2() returns int {
 
 public function hhh() {
     int x
+}
+
+public function (iii) {
+    int x;
 }

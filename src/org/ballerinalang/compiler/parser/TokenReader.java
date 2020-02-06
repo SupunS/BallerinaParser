@@ -24,10 +24,11 @@ package org.ballerinalang.compiler.parser;
  */
 public class TokenReader {
 
+    private static final int BUFFER_SIZE = 5;
+
     private BallerinaLexer lexer;
-    private Token nextToken;
+    private CircularBuffer tokensAhead = new CircularBuffer(BUFFER_SIZE);
     private Token currentToken = TokenGenerator.SOF;
-    private boolean peeked = false;
 
     TokenReader(BallerinaLexer lexer) {
         this.lexer = lexer;
@@ -39,18 +40,14 @@ public class TokenReader {
      * @return Next token in the input
      */
     public Token read() {
-        if (this.peeked) {
-            this.peeked = false;
-
+        if (this.tokensAhead.size > 0) {
             // cache the head
-            this.currentToken = this.nextToken;
-
-            return this.nextToken;
+            this.currentToken = tokensAhead.consume();
+            return this.currentToken;
         }
 
         // cache the head
         this.currentToken = this.lexer.nextToken();
-
         return this.currentToken;
     }
 
@@ -61,24 +58,21 @@ public class TokenReader {
      * @return Next token in the input
      */
     public Token peek() {
-        if (!this.peeked) {
-            this.nextToken = this.lexer.nextToken();
-            this.peeked = true;
+        if (this.tokensAhead.size == 0) {
+            this.tokensAhead.add(this.lexer.nextToken());
         }
-        return this.nextToken;
+        return this.tokensAhead.peek();
     }
 
     public Token consumeNonTrivia() {
-        if (this.peeked) {
-            this.peeked = false;
-            this.currentToken = this.nextToken;
-        } else {
-            this.currentToken = this.lexer.nextToken();
+        if (this.tokensAhead.size > 0) {
+            this.currentToken = this.tokensAhead.consume();
+            return this.currentToken;
         }
 
-        while (this.currentToken.kind == TokenKind.WHITE_SPACE ||
-                this.currentToken.kind == TokenKind.NEWLINE ||
-                this.nextToken.kind == TokenKind.COMMENT) {
+        this.currentToken = this.lexer.nextToken();
+        while (this.currentToken.kind == TokenKind.WHITE_SPACE || this.currentToken.kind == TokenKind.NEWLINE ||
+                this.currentToken.kind == TokenKind.COMMENT) {
             this.currentToken = this.lexer.nextToken();
         }
 
@@ -86,19 +80,18 @@ public class TokenReader {
     }
 
     public Token peekNonTrivia() {
-        if (this.peeked) {
-            return this.nextToken;
+        if (this.tokensAhead.size > 0) {
+            return this.tokensAhead.peek();
         }
 
-        this.nextToken = this.lexer.nextToken();
-        while (this.nextToken.kind == TokenKind.WHITE_SPACE ||
-                this.nextToken.kind == TokenKind.NEWLINE ||
-                this.nextToken.kind == TokenKind.COMMENT) {
-            this.nextToken = this.lexer.nextToken();
+        Token nextToken = this.lexer.nextToken();
+        while (nextToken.kind == TokenKind.WHITE_SPACE || nextToken.kind == TokenKind.NEWLINE ||
+                nextToken.kind == TokenKind.COMMENT) {
+            nextToken = this.lexer.nextToken();
         }
 
-        this.peeked = true;
-        return this.nextToken;
+        this.tokensAhead.add(nextToken);
+        return nextToken;
     }
 
     /**
@@ -108,5 +101,78 @@ public class TokenReader {
      */
     public Token head() {
         return this.currentToken;
+    }
+
+    public Token peek(int k) {
+        Token nextToken;
+        while (this.tokensAhead.size < k) {
+            nextToken = this.lexer.nextToken();
+            while (nextToken.kind == TokenKind.WHITE_SPACE || nextToken.kind == TokenKind.NEWLINE ||
+                    nextToken.kind == TokenKind.COMMENT) {
+                nextToken = this.lexer.nextToken();
+            }
+
+            this.tokensAhead.add(nextToken);
+        }
+
+        return this.tokensAhead.peek(k);
+    }
+
+    private static class CircularBuffer {
+
+        private final int capacity;
+        private final Token[] tokens;
+        private int endIndex = -1;
+        private int startIndex = -1;
+        private int size = 0;
+
+        CircularBuffer(int size) {
+            this.capacity = size;
+            this.tokens = new Token[size];
+        }
+
+        public void add(Token token) {
+            if (this.endIndex == this.capacity - 1) {
+                this.endIndex = 0;
+            } else {
+                this.endIndex++;
+            }
+
+            if (this.size == 0) {
+                this.startIndex = this.endIndex;
+            }
+
+            this.tokens[this.endIndex] = token;
+            this.size++;
+        }
+
+        public Token consume() {
+            Token token = this.tokens[this.startIndex];
+            this.size--;
+            if (this.startIndex == this.capacity - 1) {
+                this.startIndex = 0;
+            } else {
+                this.startIndex++;
+            }
+
+            return token;
+        }
+
+        public Token peek() {
+            return this.tokens[this.startIndex];
+        }
+
+        public Token peek(int k) {
+            if (k > this.size) {
+                throw new IndexOutOfBoundsException("size: " + this.size + ", index: " + k);
+            }
+
+            int index = this.startIndex + k - 1;
+            if (index >= this.capacity) {
+                index = index - this.capacity;
+            }
+
+            return this.tokens[index];
+        }
     }
 }
