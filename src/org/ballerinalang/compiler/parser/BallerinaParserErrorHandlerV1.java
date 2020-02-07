@@ -21,20 +21,20 @@ public class BallerinaParserErrorHandlerV1 {
 
     private final TokenReader tokenReader;
     private final BallerinaParserListener listner;
-    private final BallerinaParserErrorHandlerV2 errorHandler;
+    private final BallerinaErrorReporter errorHandler;
     private final BallerinaParser parser;
 
     private ParserRuleContext parentContext = ParserRuleContext.COMP_UNIT;
 
     public BallerinaParserErrorHandlerV1(TokenReader tokenReader, BallerinaParserListener listner,
-            BallerinaParserErrorHandlerV2 errorHandler, BallerinaParser parser) {
+            BallerinaParser parser) {
         this.tokenReader = tokenReader;
         this.listner = listner;
-        this.errorHandler = errorHandler;
+        this.errorHandler = new BallerinaErrorReporter();
         this.parser = parser;
     }
 
-    public void setParentContext(ParserRuleContext context) {
+    public void setEnclosingContext(ParserRuleContext context) {
         this.parentContext = context;
     }
 
@@ -100,6 +100,16 @@ public class BallerinaParserErrorHandlerV1 {
         }
     }
 
+    public void removeInvalidToken() {
+        Token nextToken = this.tokenReader.consumeNonTrivia();
+        // This means no match is found for the current token.
+        // Then consume it and return an error node
+        this.errorHandler.reportInvalidToken(nextToken);
+
+        // FIXME: add this error node to the tree
+        // this.listner.exitErrorNode(nextToken.text);
+    }
+    
     public void removeInvalidToken(Token nextToken) {
         // This means no match is found for the current token.
         // Then consume it and return an error node

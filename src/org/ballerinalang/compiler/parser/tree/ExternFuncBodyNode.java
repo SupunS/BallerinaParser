@@ -30,6 +30,6 @@ public class ExternFuncBodyNode extends ASTNode {
 
     @Override
     public String toString() {
-        return this.assign.toString() + this.annotation + " " + this.externalKeyword + this.semicolon;
+        return this.assign.toString() + this.annotation + " " + this.externalKeyword + " " + this.semicolon;
     }
 }

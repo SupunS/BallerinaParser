@@ -22,14 +22,14 @@ import java.io.InputStream;
 public class BallerinaParser {
 
     private final BallerinaParserListener listner = new BallerinaParserListener();
-    private final BallerinaParserErrorHandlerV2 errorHandler;
+    private final BallerinaParserErrorHandlerV3 errorHandler;
     private final TokenReader tokenReader;
 
     private ParserRuleContext parentContext = ParserRuleContext.COMP_UNIT;
 
     public BallerinaParser(BallerinaLexer lexer) {
         this.tokenReader = new TokenReader(lexer);
-        this.errorHandler = new BallerinaParserErrorHandlerV2(tokenReader, listner, this);
+        this.errorHandler = new BallerinaParserErrorHandlerV3(tokenReader, listner, this);
     }
 
     public BallerinaParser(InputStream inputStream) {
@@ -48,8 +48,6 @@ public class BallerinaParser {
         switch (context) {
             case COMP_UNIT:
                 parseCompUnit();
-                break;
-            case ANNOTATION_ATTACHMENT:
                 break;
             case EXTERNAL_FUNCTION_BODY:
                 parseExternalFunctionBody();
@@ -90,6 +88,7 @@ public class BallerinaParser {
             case ASSIGN_OP:
                 parseAssignOp();
                 break;
+            case ANNOTATION_ATTACHMENT:
             case EXTERNAL_FUNCTION_BODY_END:
                 parseExternalFunctionBodyEnd();
                 break;
@@ -432,6 +431,9 @@ public class BallerinaParser {
             case INT_LITERAL:
             case HEX_LITERAL:
                 parseLiteral();
+                break;
+            case IDENTIFIER:
+                parseVariableName();
                 break;
             default:
                 recover(token, ParserRuleContext.EXPRESSION);

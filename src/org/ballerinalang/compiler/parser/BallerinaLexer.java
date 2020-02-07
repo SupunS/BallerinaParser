@@ -28,7 +28,7 @@ import java.nio.charset.StandardCharsets;
 public class BallerinaLexer {
 
     private static final byte EOF = -1;
-    private final BallerinaLexerErrorHandler errorHandler = new BallerinaLexerErrorHandler();
+    private final BallerinaErrorReporter errorHandler = new BallerinaErrorReporter();
     private final PositionTracer tracer = new PositionTracer();
     private final TokenGenerator tokenGenerator = new TokenGenerator(this.tracer);
     private StringBuilder sb = new StringBuilder();
