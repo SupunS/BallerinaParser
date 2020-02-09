@@ -25,29 +25,23 @@ public class BallerinaParserErrorHandlerV3 {
     private final BallerinaParserListener listner;
     private final BallerinaParser parser;
 
-    private ArrayDeque<ActionItem> actionStack = new ArrayDeque<>();
-
-    private ParserRuleContext enclosingContext = ParserRuleContext.COMP_UNIT;
+    private ArrayDeque<ParserRuleContext> enclosingContext = new ArrayDeque<>();
 
     /**
      * Limit for the distance to travel, to determine a successful lookahead.
      */
     private static final int LOOKAHEAD_LIMIT = 5;
 
-    /**
-     * Maximum number of tokens to remove to recover from an invalid syntax.
-     */
-    private static final int REMOVE_LIMIT = 3;
-
     public BallerinaParserErrorHandlerV3(TokenReader tokenReader, BallerinaParserListener listner,
             BallerinaParser parser) {
         this.tokenReader = tokenReader;
         this.listner = listner;
         this.parser = parser;
+        this.enclosingContext.push(ParserRuleContext.COMP_UNIT);
     }
 
     public void setEnclosingContext(ParserRuleContext context) {
-        this.enclosingContext = context;
+        this.enclosingContext.push(context);
     }
 
     /*
@@ -63,7 +57,7 @@ public class BallerinaParserErrorHandlerV3 {
     }
 
     private void logError(int line, int col, String message) {
-//        System.out.println("xxx.bal:" + line + ":" + col + ":" + message);
+        System.out.println("xxx.bal:" + line + ":" + col + ":" + message);
     }
 
     /*
@@ -72,7 +66,6 @@ public class BallerinaParserErrorHandlerV3 {
 
     public void recover(Token nextToken, ParserRuleContext currentContext) {
         // Assumption: always comes here after a peek()
-
         if (nextToken.kind == TokenKind.EOF) {
             reportMissingTokenError("missing " + currentContext);
             this.listner.addMissingNode(currentContext.toString());
@@ -81,19 +74,26 @@ public class BallerinaParserErrorHandlerV3 {
 
         Result bestMatch = seekMatch(currentContext);
         if (bestMatch.matches > 0) {
-            ActionItem actionItem = bestMatch.actionItems.pop();
-            if (actionItem.action == Action.REMOVE) {
-                removeInvalidToken();
-                this.parser.parse(actionItem.ctx);
-            } else {
-                reportMissingTokenError("missing " + actionItem.ctx);
-                this.listner.addMissingNode(actionItem.ctx.toString());
-                // this.parser.parse(actionItem.nextCtx);
-            }
+            Solution actionItem = bestMatch.fixes.pop();
+            applyFix(actionItem);
         } else {
             // fail safe
             // this means we can't find a path to recover
             removeInvalidToken();
+        }
+    }
+
+    /**
+     * @param actionItem
+     */
+    private void applyFix(Solution actionItem) {
+        if (actionItem.action == Action.REMOVE) {
+            removeInvalidToken();
+            this.parser.parse(actionItem.ctx);
+        } else {
+            reportMissingTokenError("missing " + actionItem.ctx);
+            this.listner.addMissingNode(actionItem.ctx.toString());
+            // this.parser.parse(actionItem.nextCtx);
         }
     }
 
@@ -110,21 +110,24 @@ public class BallerinaParserErrorHandlerV3 {
         // remove current token. That means continue with the NEXT token, with the CURRENT context
         Result deletionResult = seekMatch(k + 1, depth, currentContext);
         // Result y = new Result(0);
-        if (insertionResult.matches == 0 && deletionResult.matches == 0) {
-            return insertionResult;
-        }
 
-        if (insertionResult.matches >= deletionResult.matches) { // weigh more for insertion
+        Result result;
+        Solution action;
+        if (insertionResult.matches == 0 && deletionResult.matches == 0) {
+            result = insertionResult;
+        } else if (insertionResult.matches >= deletionResult.matches) {
             // insertToken(currentContext, nextContext[0]);
-            insertionResult.actionItems
-                    .push(new ActionItem(Action.INSERT, currentContext, nextContext[0], currentContext.toString()));
-            return insertionResult;
+            action = new Solution(Action.INSERT, currentContext, currentContext.toString());
+            insertionResult.fixes.push(action);
+            result = insertionResult;
         } else {
             // removeToken(currentContext, nextContext[0]);
-            deletionResult.actionItems
-                    .push(new ActionItem(Action.REMOVE, currentContext, nextContext[0], this.tokenReader.peek(k).text));
-            return deletionResult;
+            action = new Solution(Action.REMOVE, currentContext, this.tokenReader.peek(k).text);
+            deletionResult.fixes.push(action);
+            result = deletionResult;
         }
+
+        return result;
     }
 
     public void removeInvalidToken() {
@@ -152,18 +155,8 @@ public class BallerinaParserErrorHandlerV3 {
     }
 
     private Result seekMatch(int k, int currentDepth, ParserRuleContext currentContext) {
-
-        // TODO: We may have to define the limit to the look-ahead (a tolerance level).
-        // i.e: When to stop looking further ahead, and return.
-        // Because we don't want to keep looking for eternity, whether this extraneous/mismatching
-        // token is useful in future. If its not expected for the next x number of rules (or until
-        // rule x), we can terminate.
-
-        // TODO: Memoize - if the same token is already validated against the same rule,
-        // then return the result of the previous attempt.
-
-        switch (this.enclosingContext) {
-            case FUNCTION_DEFINITION:
+        switch (this.enclosingContext.peek()) {
+            case FUNC_DEFINITION:
                 return seekMatchInFunction(k, currentDepth, currentContext);
             case STATEMENT:
                 return seekMatchInStatement(k, currentDepth, currentContext);
@@ -172,17 +165,13 @@ public class BallerinaParserErrorHandlerV3 {
         }
     }
 
-    private Result seekMatchInStatement(int k, ParserRuleContext currentContext) {
-        return seekMatchInStatement(k, 0, currentContext);
-    }
-
     private Result seekMatchInStatement(int k, int currentDepth, ParserRuleContext currentContext) {
-        ArrayDeque<ActionItem> actionItems = new ArrayDeque<>();
+        ArrayDeque<Solution> actionItems = new ArrayDeque<>();
         int matchingRulesCount = 0;
 
         ParserRuleContext nextContext = currentContext;
         boolean mismatchFound = false;
-        while (matchingRulesCount <= LOOKAHEAD_LIMIT) {
+        while (currentDepth <= LOOKAHEAD_LIMIT) {
             Token nextToken = this.tokenReader.peek(k);
             if (nextToken.kind == TokenKind.EOF) {
                 break;
@@ -236,7 +225,7 @@ public class BallerinaParserErrorHandlerV3 {
 
             if (mismatchFound) {
                 Result fixedPathResult = tryToFixAndContinue(k, currentDepth, currentContext, nextContext);
-                for (ActionItem item : fixedPathResult.actionItems) {
+                for (Solution item : fixedPathResult.fixes) {
                     actionItems.add(item); // add() here instead of push() to maintain the same order
                 }
 
@@ -292,13 +281,9 @@ public class BallerinaParserErrorHandlerV3 {
         }
     }
 
-    private Result seekMatchInFunction(int k, ParserRuleContext context) {
-        return seekMatchInFunction(k, 0, context);
-    }
-
     private Result seekMatchInFunction(int k, int currentDepth, ParserRuleContext currentContext) {
         boolean mismatchFound = false;
-        ArrayDeque<ActionItem> actionItems = new ArrayDeque<>();
+        ArrayDeque<Solution> actionItems = new ArrayDeque<>();
         int matchingRulesCount = 0;
 
         ParserRuleContext nextContext = currentContext;
@@ -310,26 +295,26 @@ public class BallerinaParserErrorHandlerV3 {
 
             currentDepth++;
             switch (nextContext) {
-                case FUNCTION_DEFINITION:
-                    nextContext = ParserRuleContext.FUNCTION_NAME;
+                case FUNC_DEFINITION:
+                    nextContext = ParserRuleContext.FUNC_NAME;
                     if (nextToken.kind != TokenKind.FUNCTION) {
                         mismatchFound = true;
                     }
                     break;
-                case FUNCTION_NAME:
-                    nextContext = ParserRuleContext.LEFT_PARANTHESIS;
+                case FUNC_NAME:
+                    nextContext = ParserRuleContext.PARAM_START;
                     if (nextToken.kind != TokenKind.IDENTIFIER) {
                         mismatchFound = true;
                     }
                     break;
                 case FUNCTION_SIGNATURE:
-                case LEFT_PARANTHESIS:
-                    nextContext = ParserRuleContext.RIGHT_PARANTHESIS;
+                case PARAM_START:
+                    nextContext = ParserRuleContext.PARAM_END;
                     if (nextToken.kind != TokenKind.LEFT_PARANTHESIS) {
                         mismatchFound = true;
                     }
                     break;
-                case PARAMETER_LIST:
+                case PARAM_LIST:
                     // TODO: if match, return the context
                     nextContext = ParserRuleContext.PARAMETER;
                 case PARAMETER:
@@ -337,9 +322,9 @@ public class BallerinaParserErrorHandlerV3 {
                     k--; // stay at the same place
                     matchingRulesCount--;
                     currentDepth--;
-                    nextContext = ParserRuleContext.RIGHT_PARANTHESIS;
+                    nextContext = ParserRuleContext.PARAM_END;
                     break;
-                case RIGHT_PARANTHESIS:
+                case PARAM_END:
                     nextContext = ParserRuleContext.RETURN_TYPE_DESCRIPTOR;
                     if (nextToken.kind != TokenKind.RIGHT_PARANTHESIS) {
                         mismatchFound = true;
@@ -366,7 +351,8 @@ public class BallerinaParserErrorHandlerV3 {
                     }
                     break;
                 case FUNCTION_BODY:
-                    Result funcBodyBlockResult = seekMatchInFunction(k, currentDepth, ParserRuleContext.LEFT_BRACE);
+                    Result funcBodyBlockResult =
+                            seekMatchInFunction(k, currentDepth, ParserRuleContext.FUNC_BODY_BLOCK_START);
                     Result externFuncResult;
                     if (funcBodyBlockResult.matches != LOOKAHEAD_LIMIT) {
                         externFuncResult = seekMatchInFunction(k, currentDepth, ParserRuleContext.ASSIGN_OP);
@@ -381,26 +367,26 @@ public class BallerinaParserErrorHandlerV3 {
 
                     if (funcBodyBlockResult.matches >= externFuncResult.matches) { // matches to function body block
                         matchingRulesCount += funcBodyBlockResult.matches;
-                        for (ActionItem item : funcBodyBlockResult.actionItems) {
+                        for (Solution item : funcBodyBlockResult.fixes) {
                             actionItems.add(item); // add() here instead of push() to maintain the same order
                         }
                     } else { // matches to external function
                         matchingRulesCount += externFuncResult.matches + 1;
-                        for (ActionItem item : externFuncResult.actionItems) {
+                        for (Solution item : externFuncResult.fixes) {
                             actionItems.add(item); // add() here instead of push() to maintain the same order
                         }
                     }
 
                     return new Result(actionItems, matchingRulesCount);
                 case FUNCTION_BODY_BLOCK:
-                case LEFT_BRACE:
-                    nextContext = ParserRuleContext.RIGHT_BRACE;
+                case FUNC_BODY_BLOCK_START:
+                    nextContext = ParserRuleContext.FUNC_BODY_BLOCK_END;
                     if (nextToken.kind != TokenKind.LEFT_BRACE) {
                         mismatchFound = true;
                         break;
                     }
                     break;
-                case RIGHT_BRACE:
+                case FUNC_BODY_BLOCK_END:
                     nextContext = ParserRuleContext.TOP_LEVEL_NODE;
                     if (nextToken.kind != TokenKind.RIGHT_BRACE) {
                         mismatchFound = true;
@@ -414,7 +400,7 @@ public class BallerinaParserErrorHandlerV3 {
                     }
                     break;
                 case ANNOTATION_ATTACHMENT:
-                case EXTERNAL_FUNCTION_BODY_END:
+                case EXTERNAL_KEYWORD:
                     nextContext = ParserRuleContext.STATEMENT_END;
                     if (nextToken.kind != TokenKind.EXTERNAL) {
                         mismatchFound = true;
@@ -427,7 +413,7 @@ public class BallerinaParserErrorHandlerV3 {
                     }
                     break;
                 case TOP_LEVEL_NODE:
-                    nextContext = ParserRuleContext.FUNCTION_DEFINITION;
+                    nextContext = ParserRuleContext.FUNC_DEFINITION;
                     if (nextToken.kind == TokenKind.PUBLIC) {
                         break;
                     }
@@ -444,7 +430,7 @@ public class BallerinaParserErrorHandlerV3 {
 
             if (mismatchFound) {
                 Result fixedPathResult = tryToFixAndContinue(k, currentDepth, currentContext, nextContext);
-                for (ActionItem item : fixedPathResult.actionItems) {
+                for (Solution item : fixedPathResult.fixes) {
                     actionItems.add(item); // add() here instead of push() to maintain the same order
                 }
 
@@ -464,36 +450,35 @@ public class BallerinaParserErrorHandlerV3 {
     }
 
     private class Result {
-        private int matches;
-        private ArrayDeque<ActionItem> actionItems;
 
-        public Result(ArrayDeque<ActionItem> actionItem, int matches) {
-            this.actionItems = actionItem;
+        private int matches;
+        private ArrayDeque<Solution> fixes;
+
+        public Result(ArrayDeque<Solution> actionItem, int matches) {
+            this.fixes = actionItem;
             this.matches = matches;
         }
 
         public Result(int matches) {
-            this.actionItems = new ArrayDeque<>();
+            this.fixes = new ArrayDeque<>();
             this.matches = matches;
         }
 
         public Result() {
-            this.actionItems = new ArrayDeque<>();
+            this.fixes = new ArrayDeque<>();
             this.matches = 0;
         }
     }
 
-    private class ActionItem {
+    private class Solution {
 
         private ParserRuleContext ctx;
-        private ParserRuleContext nextCtx;
         private Action action;
         private String token;
 
-        public ActionItem(Action action, ParserRuleContext ctx, ParserRuleContext nextCtx, String token) {
+        public Solution(Action action, ParserRuleContext ctx, String token) {
             this.action = action;
             this.ctx = ctx;
-            this.nextCtx = nextCtx;
             this.token = token;
         }
 

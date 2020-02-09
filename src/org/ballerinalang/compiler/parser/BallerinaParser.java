@@ -22,14 +22,14 @@ import java.io.InputStream;
 public class BallerinaParser {
 
     private final BallerinaParserListener listner = new BallerinaParserListener();
-    private final BallerinaParserErrorHandlerV3 errorHandler;
+    private final BallerinaParserErrorHandlerV4 errorHandler;
     private final TokenReader tokenReader;
 
     private ParserRuleContext parentContext = ParserRuleContext.COMP_UNIT;
 
     public BallerinaParser(BallerinaLexer lexer) {
         this.tokenReader = new TokenReader(lexer);
-        this.errorHandler = new BallerinaParserErrorHandlerV3(tokenReader, listner, this);
+        this.errorHandler = new BallerinaParserErrorHandlerV4(tokenReader, listner, this);
     }
 
     public BallerinaParser(InputStream inputStream) {
@@ -55,28 +55,28 @@ public class BallerinaParser {
             case FUNCTION_BODY:
                 parseFunctionBody();
                 break;
-            case LEFT_BRACE:
+            case FUNC_BODY_BLOCK_START:
                 parseLeftBrace();
                 break;
-            case RIGHT_BRACE:
+            case FUNC_BODY_BLOCK_END:
                 parseRightBrace();
                 break;
-            case FUNCTION_DEFINITION:
+            case FUNC_DEFINITION:
                 parseFunctionDefinition();
                 break;
-            case FUNCTION_NAME:
+            case FUNC_NAME:
                 parseFunctionName();
                 break;
             case FUNCTION_SIGNATURE:
                 parseFunctionSignature();
                 break;
-            case LEFT_PARANTHESIS:
+            case PARAM_START:
                 parseLeftParanthesis();
                 break;
             case PARAMETER:
                 // TODO
                 break;
-            case PARAMETER_LIST:
+            case PARAM_LIST:
                 parseParamList();
                 break;
             case RETURN_TYPE_DESCRIPTOR:
@@ -89,7 +89,7 @@ public class BallerinaParser {
                 parseAssignOp();
                 break;
             case ANNOTATION_ATTACHMENT:
-            case EXTERNAL_FUNCTION_BODY_END:
+            case EXTERNAL_KEYWORD:
                 parseExternalFunctionBodyEnd();
                 break;
             case FUNCTION_BODY_BLOCK:
@@ -98,7 +98,7 @@ public class BallerinaParser {
             case STATEMENT_END:
                 parseStatementEnd();
                 break;
-            case RIGHT_PARANTHESIS:
+            case PARAM_END:
                 parseFunctionSignatureEnd();
                 break;
             case VARIABLE_NAME:
@@ -173,7 +173,7 @@ public class BallerinaParser {
      */
     private void parseFunctionDefinition() {
         ParserRuleContext prevContext = this.parentContext;
-        switchContext(ParserRuleContext.FUNCTION_DEFINITION);
+        switchContext(ParserRuleContext.FUNC_DEFINITION);
 
         this.listner.exitSyntaxNode(consume()); // 'function' keyword. This is already verified
 
@@ -191,7 +191,7 @@ public class BallerinaParser {
         if (token.kind == TokenKind.IDENTIFIER) {
             this.listner.exitFunctionName(consume()); // function name
         } else {
-            recover(token, ParserRuleContext.FUNCTION_NAME);
+            recover(token, ParserRuleContext.FUNC_NAME);
         }
     }
 
@@ -216,7 +216,7 @@ public class BallerinaParser {
         if (token.kind == TokenKind.RIGHT_PARANTHESIS) {
             this.listner.exitSyntaxNode(consume()); // )
         } else {
-            recover(token, ParserRuleContext.RIGHT_PARANTHESIS);
+            recover(token, ParserRuleContext.PARAM_END);
         }
     }
 
@@ -228,7 +228,7 @@ public class BallerinaParser {
         if (token.kind == TokenKind.LEFT_PARANTHESIS) {
             this.listner.exitSyntaxNode(consume()); // (
         } else {
-            recover(token, ParserRuleContext.LEFT_PARANTHESIS);
+            recover(token, ParserRuleContext.PARAM_START);
         }
     }
 
@@ -456,7 +456,7 @@ public class BallerinaParser {
         if (token.kind == TokenKind.RIGHT_BRACE) {
             this.listner.exitSyntaxNode(consume()); // }
         } else {
-            recover(token, ParserRuleContext.RIGHT_BRACE);
+            recover(token, ParserRuleContext.FUNC_BODY_BLOCK_END);
         }
     }
 
@@ -468,7 +468,7 @@ public class BallerinaParser {
         if (token.kind == TokenKind.LEFT_BRACE) {
             this.listner.exitSyntaxNode(consume()); // {
         } else {
-            recover(token, ParserRuleContext.LEFT_BRACE);
+            recover(token, ParserRuleContext.FUNC_BODY_BLOCK_START);
         }
     }
 
@@ -505,7 +505,7 @@ public class BallerinaParser {
         if (token.kind == TokenKind.EXTERNAL) {
             this.listner.exitSyntaxNode(consume()); // 'external' keyword
         } else {
-            recover(token, ParserRuleContext.EXTERNAL_FUNCTION_BODY_END);
+            recover(token, ParserRuleContext.EXTERNAL_KEYWORD);
         }
     }
 

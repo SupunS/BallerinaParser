@@ -24,7 +24,7 @@ package org.ballerinalang.compiler.parser;
  */
 public class TokenReader {
 
-    private static final int BUFFER_SIZE = 100;
+    private static final int BUFFER_SIZE = 20;
 
     private BallerinaLexer lexer;
     private CircularBuffer tokensAhead = new CircularBuffer(BUFFER_SIZE);
@@ -135,7 +135,7 @@ public class TokenReader {
             if (this.size == this.capacity) {
                 throw new IndexOutOfBoundsException("buffer overflow");
             }
-            
+
             if (this.endIndex == this.capacity - 1) {
                 this.endIndex = 0;
             } else {
