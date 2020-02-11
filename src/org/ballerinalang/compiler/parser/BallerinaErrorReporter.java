@@ -15,30 +15,25 @@
  * specific language governing permissions and limitations
  * under the License.
  */
-package org.ballerinalang.compiler.parser.tree;
+package org.ballerinalang.compiler.parser;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.StringJoiner;
+public class BallerinaErrorReporter {
 
-public class ParametersNode extends ASTNode {
+    /*
+     * -------------- Error reporting --------------
+     * 
+     * TODO: Duplicate methods. Try unifying
+     */
 
-    List<ASTNode> parameters = new ArrayList<>();
-
-    public ParametersNode() {
-        this.kind = NodeKind.PARAMETERS;
+    public void reportInvalidToken(Token token) {
+        logError(token.line, token.startCol, "invalid token '" + token.text + "'");
     }
 
-    public void add(ASTNode param) {
-        this.parameters.add(param);
+    public void reportMissingTokenError(Token token, String message) {
+        logError(token.line, token.endCol, message);
     }
 
-    @Override
-    public String toString() {
-        StringJoiner sj = new StringJoiner(",");
-        for (ASTNode param : this.parameters) {
-            sj.add(param.toString());
-        }
-        return sj.toString();
+    private void logError(int line, int col, String message) {
+        System.out.println("xxx.bal:" + line + ":" + col + ":" + message);
     }
 }

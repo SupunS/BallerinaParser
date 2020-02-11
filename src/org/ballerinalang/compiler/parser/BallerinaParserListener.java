@@ -62,9 +62,9 @@ public class BallerinaParserListener {
         FunctionNode func = new FunctionNode();
         func.body = this.nodesStack.pop();
         func.returnType = this.nodesStack.pop();
-        func.leftParenthesis = this.nodesStack.pop();
-        func.parameters = this.nodesStack.pop();
         func.rightParenthesis = this.nodesStack.pop();
+        func.parameters = this.nodesStack.pop();
+        func.leftParenthesis = this.nodesStack.pop();
         func.name = this.nodesStack.pop();
         func.functionKeyword = this.nodesStack.pop();
         func.modifiers = this.modifiersList;

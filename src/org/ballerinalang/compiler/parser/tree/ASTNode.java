@@ -18,6 +18,7 @@
 package org.ballerinalang.compiler.parser.tree;
 
 public abstract class ASTNode {
+
     public NodeKind kind = NodeKind.INVALID;
     public Trivia meta;
 }

@@ -21,6 +21,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class FunctionNode extends ASTNode {
+
     public ASTNode functionKeyword;
     public ASTNode name;
     public ASTNode leftParenthesis;
@@ -42,9 +43,10 @@ public class FunctionNode extends ASTNode {
             sj.append(modifier.toString() + " ");
         }
         sj.append("function ");
-        sj.append(this.name.toString());
+        sj.append(this.name.toString() + " ");
+        sj.append(leftParenthesis.toString() + " ");
         sj.append(this.parameters.toString() + " ");
-
+        sj.append(rightParenthesis.toString() + " ");
         if (this.returnType.kind != NodeKind.EMPTY) {
             sj.append(this.returnType.toString() + " ");
         }

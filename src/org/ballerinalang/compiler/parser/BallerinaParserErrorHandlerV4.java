@@ -18,8 +18,11 @@
 package org.ballerinalang.compiler.parser;
 
 import java.util.ArrayDeque;
+import java.util.Arrays;
+import java.util.HashMap;
+import java.util.Map;
 
-public class BallerinaParserErrorHandlerV3 {
+public class BallerinaParserErrorHandlerV4 {
 
     private final TokenReader tokenReader;
     private final BallerinaParserListener listner;
@@ -32,7 +35,9 @@ public class BallerinaParserErrorHandlerV3 {
      */
     private static final int LOOKAHEAD_LIMIT = 5;
 
-    public BallerinaParserErrorHandlerV3(TokenReader tokenReader, BallerinaParserListener listner,
+    private Map<Key, Solution> recoveryCache = new HashMap<>();
+
+    public BallerinaParserErrorHandlerV4(TokenReader tokenReader, BallerinaParserListener listner,
             BallerinaParser parser) {
         this.tokenReader = tokenReader;
         this.listner = listner;
@@ -66,6 +71,14 @@ public class BallerinaParserErrorHandlerV3 {
 
     public void recover(Token nextToken, ParserRuleContext currentContext) {
         // Assumption: always comes here after a peek()
+
+        Key key = new Key(nextToken, currentContext);
+        Solution fromCace = this.recoveryCache.get(key);
+        if (fromCace != null) {
+            applyFix(fromCace);
+            return;
+        }
+
         if (nextToken.kind == TokenKind.EOF) {
             reportMissingTokenError("missing " + currentContext);
             this.listner.addMissingNode(currentContext.toString());
@@ -74,8 +87,14 @@ public class BallerinaParserErrorHandlerV3 {
 
         Result bestMatch = seekMatch(currentContext);
         if (bestMatch.matches > 0) {
-            Solution actionItem = bestMatch.fixes.pop();
-            applyFix(actionItem);
+
+            // Add to cache
+            for (Solution item : bestMatch.fixes) {
+                this.recoveryCache.put(new Key(nextToken, item.ctx), item);
+            }
+
+            Solution fix = bestMatch.fixes.pop();
+            applyFix(fix);
         } else {
             // fail safe
             // this means we can't find a path to recover
@@ -98,11 +117,11 @@ public class BallerinaParserErrorHandlerV3 {
     }
 
     private Result tryToFixAndContinue(int k, int depth, ParserRuleContext currentContext,
-                                       ParserRuleContext... nextContext) {
+                                       ParserRuleContext nextContext) {
         // insert the missing token. That means continue the CURRENT token, with the NEXT Context
         Result insertionResult;
-        if (currentContext != nextContext[0]) {
-            insertionResult = seekMatch(k, depth, nextContext[0]);
+        if (currentContext != nextContext) {
+            insertionResult = seekMatch(k, depth, nextContext);
         } else {
             insertionResult = new Result();
         }
@@ -157,9 +176,20 @@ public class BallerinaParserErrorHandlerV3 {
     private Result seekMatch(int k, int currentDepth, ParserRuleContext currentContext) {
         switch (this.enclosingContext.peek()) {
             case FUNC_DEFINITION:
+            case TOP_LEVEL_NODE:
+            case COMP_UNIT:
+            case FUNC_BODY:
+            case FUNC_SIGNATURE:
+            case EXTERNAL_FUNC_BODY:
+            case FUNC_BODY_BLOCK:
+            case PARAM_LIST:
+            case PARAMETER:
+            case ANNOTATION_ATTACHMENT:
+            case RETURN_TYPE_DESCRIPTOR:
                 return seekMatchInFunction(k, currentDepth, currentContext);
             case STATEMENT:
                 return seekMatchInStatement(k, currentDepth, currentContext);
+            case EXPRESSION:
             default:
                 return new Result();
         }
@@ -209,7 +239,12 @@ public class BallerinaParserErrorHandlerV3 {
                     // FIXME: alternative paths
                     if (nextToken.kind != TokenKind.SEMICOLON) {
                         if (isEndOfBlock(nextToken)) {
-                            nextContext = ParserRuleContext.TOP_LEVEL_NODE;
+
+                            // FIXME: this doesnt work. Properly switch back to the function context.
+                            // Make sure to revert back to the current context when unwinding.
+
+                            // this.enclosingContext = ParserRuleContext.FUNC_DEFINITION;
+                            nextContext = ParserRuleContext.CLOSE_BRACE;
                         } else {
                             nextContext = ParserRuleContext.STATEMENT;
                         }
@@ -283,7 +318,7 @@ public class BallerinaParserErrorHandlerV3 {
 
     private Result seekMatchInFunction(int k, int currentDepth, ParserRuleContext currentContext) {
         boolean mismatchFound = false;
-        ArrayDeque<Solution> actionItems = new ArrayDeque<>();
+        ArrayDeque<Solution> fixes = new ArrayDeque<>();
         int matchingRulesCount = 0;
 
         ParserRuleContext nextContext = currentContext;
@@ -353,12 +388,8 @@ public class BallerinaParserErrorHandlerV3 {
                 case FUNC_BODY:
                     Result funcBodyBlockResult =
                             seekMatchInFunction(k, currentDepth, ParserRuleContext.OPEN_BRACE);
-                    Result externFuncResult;
-                    if (funcBodyBlockResult.matches != LOOKAHEAD_LIMIT) {
-                        externFuncResult = seekMatchInFunction(k, currentDepth, ParserRuleContext.ASSIGN_OP);
-                    } else {
-                        externFuncResult = new Result(currentDepth);
-                    }
+                    Result externFuncResult =
+                            seekMatchInFunction(k, currentDepth, ParserRuleContext.ASSIGN_OP);
 
                     if (funcBodyBlockResult.matches == 0 && externFuncResult.matches == 0) {
                         mismatchFound = true;
@@ -368,16 +399,16 @@ public class BallerinaParserErrorHandlerV3 {
                     if (funcBodyBlockResult.matches >= externFuncResult.matches) { // matches to function body block
                         matchingRulesCount += funcBodyBlockResult.matches;
                         for (Solution item : funcBodyBlockResult.fixes) {
-                            actionItems.add(item); // add() here instead of push() to maintain the same order
+                            fixes.add(item); // add() here instead of push() to maintain the same order
                         }
                     } else { // matches to external function
                         matchingRulesCount += externFuncResult.matches + 1;
                         for (Solution item : externFuncResult.fixes) {
-                            actionItems.add(item); // add() here instead of push() to maintain the same order
+                            fixes.add(item); // add() here instead of push() to maintain the same order
                         }
                     }
 
-                    return new Result(actionItems, matchingRulesCount);
+                    return new Result(fixes, matchingRulesCount);
                 case FUNC_BODY_BLOCK:
                 case OPEN_BRACE:
                     nextContext = ParserRuleContext.CLOSE_BRACE;
@@ -431,7 +462,7 @@ public class BallerinaParserErrorHandlerV3 {
             if (mismatchFound) {
                 Result fixedPathResult = tryToFixAndContinue(k, currentDepth, currentContext, nextContext);
                 for (Solution item : fixedPathResult.fixes) {
-                    actionItems.add(item); // add() here instead of push() to maintain the same order
+                    fixes.add(item); // add() here instead of push() to maintain the same order
                 }
 
                 matchingRulesCount += fixedPathResult.matches;
@@ -446,11 +477,10 @@ public class BallerinaParserErrorHandlerV3 {
             k++;
         }
 
-        return new Result(actionItems, matchingRulesCount);
+        return new Result(fixes, matchingRulesCount);
     }
 
     private class Result {
-
         private int matches;
         private ArrayDeque<Solution> fixes;
 
@@ -485,6 +515,35 @@ public class BallerinaParserErrorHandlerV3 {
         @Override
         public String toString() {
             return action.toString() + "'" + token + "'";
+        }
+    }
+
+    private class Key {
+        Token token;
+        ParserRuleContext ctx;
+        int hash;
+
+        Key(Token token, ParserRuleContext ctx) {
+            this.token = token;
+            this.ctx = ctx;
+            this.hash = Arrays.deepHashCode(new Object[] { this.token, this.ctx });
+        }
+
+        @Override
+        public int hashCode() {
+            return this.hash;
+        }
+
+        @Override
+        public boolean equals(Object obj) {
+            if (obj == null) {
+                return false;
+            }
+
+            if (!(obj instanceof Key)) {
+                return false;
+            }
+            return ((Key) obj).ctx.equals(ctx) && ((Key) obj).token.equals(token);
         }
     }
 

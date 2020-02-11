@@ -42,7 +42,7 @@ public class BallerinaParserErrorHandlerV1 {
         switch (currentContext) {
             case ANNOTATION_ATTACHMENT:
                 break;
-            case FUNCTION_BODY:
+            case FUNC_BODY:
                 recoverFunctionBody(nextToken);
                 break;
             case FUNC_DEFINITION:
@@ -50,17 +50,17 @@ public class BallerinaParserErrorHandlerV1 {
             case FUNC_NAME:
                 recoverFunctionName(nextToken);
                 break;
-            case PARAM_START:
+            case OPEN_PARANTHESIS:
                 recoverLeftParanthesis(nextToken);
                 break;
-            case PARAM_END:
+            case CLOSE_PARANTHESIS:
                 recoverRightParanthesis(nextToken);
                 break;
             case PARAMETER:
                 break;
             case PARAM_LIST:
                 break;
-            case RETURN_TYPE_DESCRIPTOR:
+            case RETURNS:
                 recoverReturnTypeDescriptor(nextToken);
                 break;
             case TYPE_DESCRIPTOR:
@@ -68,18 +68,18 @@ public class BallerinaParserErrorHandlerV1 {
                 break;
             case COMP_UNIT:
                 break;
-            case FUNC_BODY_BLOCK_START:
+            case OPEN_BRACE:
                 recoverRightBrace(nextToken);
                 break;
-            case FUNC_BODY_BLOCK_END:
+            case CLOSE_BRACE:
                 recoverRightBrace();
                 break;
-            case EXTERNAL_FUNCTION_BODY:
+            case EXTERNAL_FUNC_BODY:
                 break;
             case ASSIGN_OP:
                 recoverAssignOperator(nextToken);
                 break;
-            case STATEMENT_END:
+            case SEMICOLON:
                 recoverSemicolon();
                 break;
             case VARIABLE_NAME:
@@ -88,9 +88,9 @@ public class BallerinaParserErrorHandlerV1 {
             case EXPRESSION:
                 recoverExpression(nextToken);
                 break;
-            case FUNCTION_BODY_BLOCK:
+            case FUNC_BODY_BLOCK:
             case EXTERNAL_KEYWORD:
-            case FUNCTION_SIGNATURE:
+            case FUNC_SIGNATURE:
             case STATEMENT:
             case TOP_LEVEL_NODE:
             default:
@@ -109,7 +109,7 @@ public class BallerinaParserErrorHandlerV1 {
         // FIXME: add this error node to the tree
         // this.listner.exitErrorNode(nextToken.text);
     }
-    
+
     public void removeInvalidToken(Token nextToken) {
         // This means no match is found for the current token.
         // Then consume it and return an error node
@@ -120,9 +120,10 @@ public class BallerinaParserErrorHandlerV1 {
         // this.listner.exitErrorNode(nextToken.text);
     }
 
-    private void reportMissingTokenError(String message) {
+    private void reportMissingTokenError(String token) {
         Token currentToken = this.tokenReader.head();
-        this.errorHandler.reportMissingTokenError(currentToken, message);
+        this.errorHandler.reportMissingTokenError(currentToken, "missing '" + token + "'");
+        this.listner.addMissingNode(token);
     }
 
     /**
@@ -150,7 +151,7 @@ public class BallerinaParserErrorHandlerV1 {
     }
 
     private void recoverReturnTypeDescriptor(Token nextToken) {
-        if (prune(nextToken, ParserRuleContext.RETURN_TYPE_DESCRIPTOR)) {
+        if (prune(nextToken, ParserRuleContext.RETURNS)) {
             return;
         }
 
@@ -162,14 +163,14 @@ public class BallerinaParserErrorHandlerV1 {
             return;
         }
 
-        reportMissingTokenError("missing type descriptor");
+        reportMissingTokenError("type descriptor");
         this.listner.addMissingNode();
     }
 
     private void recoverSemicolon() {
         // Reaches here only if the ';' is missing. So no need to prune.
         // Simply log and continue;
-        reportMissingTokenError("missing ';'");
+        reportMissingTokenError(";");
     }
 
     private void recoverAssignOperator(Token nextToken) {
@@ -177,40 +178,39 @@ public class BallerinaParserErrorHandlerV1 {
             return;
         }
 
-        reportMissingTokenError("missing '='");
+        reportMissingTokenError("=");
     }
 
     private void recoverRightBrace(Token nextToken) {
-        if (prune(nextToken, ParserRuleContext.FUNC_BODY_BLOCK_START)) {
+        if (prune(nextToken, ParserRuleContext.OPEN_BRACE)) {
             return;
         }
 
         // We come here if theres a matching rule ahead.
         // No need to add a node for this
-        reportMissingTokenError("missing '{'");
-
+        reportMissingTokenError("{");
     }
 
     private void recoverRightBrace() {
         // Reaches here only if the '}' to end the function body block is missing.
         // So no need to prune. Simply log and continue;
-        reportMissingTokenError("missing '}'");
+        reportMissingTokenError("}");
 
     }
 
     private void recoverFunctionBody(Token nextToken) {
-        if (hasMatchInFunction(nextToken, ParserRuleContext.EXTERNAL_FUNCTION_BODY)) {
-            this.parser.parse(ParserRuleContext.EXTERNAL_FUNCTION_BODY);
+        if (hasMatchInFunction(nextToken, ParserRuleContext.EXTERNAL_FUNC_BODY)) {
+            this.parser.parse(ParserRuleContext.EXTERNAL_FUNC_BODY);
             return;
         }
 
-        if (hasMatchInFunction(nextToken, ParserRuleContext.FUNCTION_BODY_BLOCK)) {
-            this.parser.parse(ParserRuleContext.FUNCTION_BODY_BLOCK);
+        if (hasMatchInFunction(nextToken, ParserRuleContext.FUNC_BODY_BLOCK)) {
+            this.parser.parse(ParserRuleContext.FUNC_BODY_BLOCK);
             return;
         }
 
         removeInvalidToken(nextToken);
-        this.parser.parse(ParserRuleContext.FUNCTION_BODY);
+        this.parser.parse(ParserRuleContext.FUNC_BODY);
     }
 
     private void recoverFunctionName(Token nextToken) {
@@ -220,22 +220,21 @@ public class BallerinaParserErrorHandlerV1 {
 
         // We come here if there's a matching rule ahead.
         // So fill the tree for the expected function name, and continue the parsing.
-        reportMissingTokenError("missing function name");
-        this.listner.addMissingNode();
+        reportMissingTokenError("function name");
     }
 
     private void recoverLeftParanthesis(Token nextToken) {
-        if (prune(nextToken, ParserRuleContext.PARAM_START)) {
+        if (prune(nextToken, ParserRuleContext.OPEN_PARANTHESIS)) {
             return;
         }
-        reportMissingTokenError("missing '('");
+        reportMissingTokenError("(");
     }
 
     private void recoverRightParanthesis(Token nextToken) {
-        if (prune(nextToken, ParserRuleContext.PARAM_END)) {
+        if (prune(nextToken, ParserRuleContext.CLOSE_PARANTHESIS)) {
             return;
         }
-        reportMissingTokenError("missing ')'");
+        reportMissingTokenError(")");
     }
 
     private void recoverVariableName(Token nextToken) {
@@ -243,7 +242,7 @@ public class BallerinaParserErrorHandlerV1 {
             return;
         }
 
-        reportMissingTokenError("missing variable");
+        reportMissingTokenError("variable");
         this.listner.addMissingNode();
     }
 
@@ -252,7 +251,7 @@ public class BallerinaParserErrorHandlerV1 {
             return;
         }
 
-        reportMissingTokenError("missing expression");
+        reportMissingTokenError("expression");
     }
 
     /*
@@ -311,9 +310,9 @@ public class BallerinaParserErrorHandlerV1 {
                 if (hasMatchInExpression(nextToken)) {
                     return true;
                 }
-                nextContext = ParserRuleContext.STATEMENT_END;
+                nextContext = ParserRuleContext.SEMICOLON;
                 break;
-            case STATEMENT_END:
+            case SEMICOLON:
                 if (nextToken.kind == TokenKind.SEMICOLON) {
                     return true;
                 }
@@ -356,7 +355,7 @@ public class BallerinaParserErrorHandlerV1 {
     private boolean hasMatchInFunction(Token nextToken, ParserRuleContext currentContext) {
         ParserRuleContext nextContext;
         switch (currentContext) {
-            case PARAM_START:
+            case OPEN_PARANTHESIS:
                 if (nextToken.kind == TokenKind.LEFT_PARANTHESIS) {
                     return true;
                 }
@@ -368,15 +367,15 @@ public class BallerinaParserErrorHandlerV1 {
                 nextContext = ParserRuleContext.PARAMETER;
             case PARAMETER:
                 // TODO: if match, return the context
-                nextContext = ParserRuleContext.PARAM_END;
+                nextContext = ParserRuleContext.CLOSE_PARANTHESIS;
                 break;
-            case PARAM_END:
+            case CLOSE_PARANTHESIS:
                 if (nextToken.kind == TokenKind.RIGHT_PARANTHESIS) {
                     return true;
                 }
-                nextContext = ParserRuleContext.RETURN_TYPE_DESCRIPTOR;
+                nextContext = ParserRuleContext.RETURNS;
                 break;
-            case RETURN_TYPE_DESCRIPTOR:
+            case RETURNS:
                 if (nextToken.kind == TokenKind.RETURNS) {
                     return true;
                 }
@@ -386,28 +385,28 @@ public class BallerinaParserErrorHandlerV1 {
                 if (nextToken.kind == TokenKind.TYPE) {
                     return true;
                 }
-                nextContext = ParserRuleContext.FUNCTION_BODY;
+                nextContext = ParserRuleContext.FUNC_BODY;
                 break;
-            case FUNCTION_BODY:
-                if (hasMatchInFunction(nextToken, ParserRuleContext.EXTERNAL_FUNCTION_BODY)) {
+            case FUNC_BODY:
+                if (hasMatchInFunction(nextToken, ParserRuleContext.EXTERNAL_FUNC_BODY)) {
                     return true;
                 }
-                nextContext = ParserRuleContext.FUNC_BODY_BLOCK_START;
+                nextContext = ParserRuleContext.OPEN_BRACE;
                 break;
-            case FUNCTION_BODY_BLOCK:
-            case FUNC_BODY_BLOCK_START:
+            case FUNC_BODY_BLOCK:
+            case OPEN_BRACE:
                 if (nextToken.kind == TokenKind.LEFT_BRACE) {
                     return true;
                 }
-                nextContext = ParserRuleContext.FUNC_BODY_BLOCK_END;
+                nextContext = ParserRuleContext.CLOSE_BRACE;
                 break;
-            case FUNC_BODY_BLOCK_END:
+            case CLOSE_BRACE:
                 return nextToken.kind == TokenKind.RIGHT_BRACE;
             case COMP_UNIT:
             case ANNOTATION_ATTACHMENT:
                 nextContext = ParserRuleContext.EXTERNAL_KEYWORD;
                 break;
-            case EXTERNAL_FUNCTION_BODY:
+            case EXTERNAL_FUNC_BODY:
             case ASSIGN_OP:
                 if (nextToken.kind == TokenKind.ASSIGN) {
                     return true;
@@ -418,19 +417,19 @@ public class BallerinaParserErrorHandlerV1 {
                 if (nextToken.kind == TokenKind.EXTERNAL) {
                     return true;
                 }
-                nextContext = ParserRuleContext.STATEMENT_END;
+                nextContext = ParserRuleContext.SEMICOLON;
                 break;
-            case STATEMENT_END:
+            case SEMICOLON:
                 return nextToken.kind == TokenKind.SEMICOLON;
             case FUNC_NAME:
                 if (nextToken.kind == TokenKind.IDENTIFIER) {
                     return true;
                 }
-                nextContext = ParserRuleContext.PARAM_START;
+                nextContext = ParserRuleContext.OPEN_PARANTHESIS;
                 break;
             case TOP_LEVEL_NODE:
             case FUNC_DEFINITION:
-            case FUNCTION_SIGNATURE:
+            case FUNC_SIGNATURE:
             default:
                 return false;
         }

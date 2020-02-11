@@ -17,28 +17,18 @@
  */
 package org.ballerinalang.compiler.parser.tree;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.StringJoiner;
+import org.ballerinalang.compiler.parser.Token;
 
-public class ParametersNode extends ASTNode {
+public class SyntaxNode extends ASTNode {
 
-    List<ASTNode> parameters = new ArrayList<>();
+    Token value;
 
-    public ParametersNode() {
-        this.kind = NodeKind.PARAMETERS;
-    }
-
-    public void add(ASTNode param) {
-        this.parameters.add(param);
+    public SyntaxNode(Token text) {
+        this.value = text;
     }
 
     @Override
     public String toString() {
-        StringJoiner sj = new StringJoiner(",");
-        for (ASTNode param : this.parameters) {
-            sj.add(param.toString());
-        }
-        return sj.toString();
+        return this.value.text;
     }
 }

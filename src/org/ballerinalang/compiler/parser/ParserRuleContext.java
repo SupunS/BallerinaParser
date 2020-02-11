@@ -19,29 +19,35 @@ package org.ballerinalang.compiler.parser;
 
 public enum ParserRuleContext {
 
+    // productions
+
+    TOP_LEVEL_NODE(null),
     COMP_UNIT(null),
     FUNC_DEFINITION(null),
-    FUNC_NAME("function name"),
-    PARAM_START("("),
-    PARAM_END(")"),
+    STATEMENT(null),
     PARAM_LIST("parameters"),
     PARAMETER("parameter"),
-    RETURN_TYPE_DESCRIPTOR("returns"),
-    TYPE_DESCRIPTOR("type"),
     ANNOTATION_ATTACHMENT("annotation"),
-    FUNCTION_BODY("function body"),
-    FUNC_BODY_BLOCK_START("{"),
-    FUNC_BODY_BLOCK_END("}"),
+    FUNC_BODY("function body"),
+    FUNC_SIGNATURE("function signature"),
+    EXTERNAL_FUNC_BODY("external function body"),
+    FUNC_BODY_BLOCK("function body"),
+    EXPRESSION("expression"),
+    RETURN_TYPE_DESCRIPTOR("return type desc"),
+    
+    // terminals
+
+    FUNC_NAME("function name"),
+    OPEN_PARANTHESIS("("),
+    CLOSE_PARANTHESIS(")"),
+    RETURNS("returns"),
+    TYPE_DESCRIPTOR("type"),
+    OPEN_BRACE("{"),
+    CLOSE_BRACE("}"),
     ASSIGN_OP("="),
-    FUNCTION_SIGNATURE("function signature"),
-    STATEMENT_END(";"),
-    EXTERNAL_FUNCTION_BODY("external function body"),
+    SEMICOLON(";"),
     EXTERNAL_KEYWORD("external"), 
-    FUNCTION_BODY_BLOCK("function body"),
-    TOP_LEVEL_NODE(null),
-    STATEMENT(null),
-    VARIABLE_NAME("variable"),
-    EXPRESSION("expression");
+    VARIABLE_NAME("variable");
 
     private String value;
 
