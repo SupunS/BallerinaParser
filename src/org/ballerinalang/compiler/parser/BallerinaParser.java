@@ -106,6 +106,14 @@ public class BallerinaParser {
                 parseExpression();
                 break;
             case STATEMENT:
+                parseStatement();
+                break;
+            case VAR_DEF_STMT:
+                parseVariableDefStmt();
+                break;
+            case ASSIGNMENT_STMT:
+                parseAssignmentStmt();
+                break;
             case TOP_LEVEL_NODE:
             default:
                 throw new IllegalStateException("Cannot re-parse rule:" + context);
@@ -127,6 +135,14 @@ public class BallerinaParser {
 
     private void recover(Token token, ParserRuleContext currentContext) {
         this.errorHandler.recover(token, currentContext);
+    }
+
+    private void switchContext(ParserRuleContext context) {
+        this.errorHandler.pushContext(context);
+    }
+
+    private void revertContext() {
+        this.errorHandler.popContext();
     }
 
     /**
@@ -344,7 +360,7 @@ public class BallerinaParser {
      */
     private void parseFunctionBodyBlock() {
         switchContext(ParserRuleContext.FUNC_BODY_BLOCK);
-        
+
         parseLeftBrace();
         parseStatements(); // TODO: allow workers
         parseRightBrace();
@@ -380,45 +396,6 @@ public class BallerinaParser {
         }
     }
 
-    /**
-     * 
-     */
-    private void parseStatement() {
-        switchContext(ParserRuleContext.STATEMENT);
-        
-        Token token = peek();
-        switch (token.kind) {
-            case TYPE:
-                // TODO: add other statements that starts with a type
-                parseVariableDefStmt();
-                break;
-            default:
-                this.errorHandler.removeInvalidToken();
-                break;
-        }
-        
-        revertContext();
-    }
-
-    /**
-     * 
-     */
-    private void parseVariableDefStmt() {
-        parseTypeDescriptor();
-        parseVariableName();
-
-        Token token = peek();
-        boolean hasExpr = false;
-        if (token.kind != TokenKind.SEMICOLON) {
-            parseAssignOp();
-            parseExpression();
-            hasExpr = true;
-        }
-
-        parseStatementEnd();
-        this.listner.exitVarDefStmt(hasExpr);
-    }
-
     private void parseVariableName() {
         Token token = peek();
         if (token.kind == TokenKind.IDENTIFIER) {
@@ -427,36 +404,6 @@ public class BallerinaParser {
         } else {
             recover(token, ParserRuleContext.VARIABLE_NAME);
         }
-    }
-
-    /**
-     * 
-     */
-    private void parseExpression() {
-        switchContext(ParserRuleContext.EXPRESSION);
-        Token token = peek();
-        switch (token.kind) {
-            case FLOAT_LITERAL:
-            case INT_LITERAL:
-            case HEX_LITERAL:
-                parseLiteral();
-                break;
-            case IDENTIFIER:
-                parseVariableName();
-                break;
-            default:
-                recover(token, ParserRuleContext.EXPRESSION);
-                break;
-        }
-        
-        revertContext();
-    }
-
-    /**
-     * 
-     */
-    private void parseLiteral() {
-        this.listner.exitLiteral(consume()); // literal
     }
 
     /**
@@ -522,6 +469,10 @@ public class BallerinaParser {
         }
     }
 
+    /*
+     * Operators
+     */
+
     /**
      * 
      */
@@ -534,11 +485,85 @@ public class BallerinaParser {
         }
     }
 
-    private void switchContext(ParserRuleContext context) {
-        this.errorHandler.pushContext(context);
+    /*
+     * Statements
+     */
+
+    private void parseStatement() {
+        Token token = peek();
+        switch (token.kind) {
+            case TYPE:
+                // TODO: add other statements that starts with a type
+                parseVariableDefStmt();
+                break;
+            case IDENTIFIER:
+                parseAssignmentStmt();
+                break;
+            default:
+                if (!isEndOfBlock(token)) {
+                    recover(token, ParserRuleContext.STATEMENT);
+                }
+                break;
+        }
     }
 
-    private void revertContext() {
-        this.errorHandler.popContext();
+    private void parseVariableDefStmt() {
+        switchContext(ParserRuleContext.VAR_DEF_STMT);
+
+        parseTypeDescriptor();
+        parseVariableName();
+
+        Token token = peek();
+        boolean hasExpr = false;
+        if (token.kind != TokenKind.SEMICOLON) {
+            parseAssignOp();
+            parseExpression();
+            hasExpr = true;
+        }
+
+        parseStatementEnd();
+        this.listner.exitVarDefStmt(hasExpr);
+
+        revertContext();
+    }
+
+    private void parseAssignmentStmt() {
+        switchContext(ParserRuleContext.ASSIGNMENT_STMT);
+
+        parseVariableName();
+        parseAssignOp();
+        parseExpression();
+        parseStatementEnd();
+        this.listner.exitAssignmentStmt();
+
+        revertContext();
+    }
+
+    /*
+     * Expressions
+     */
+
+    private void parseExpression() {
+        switchContext(ParserRuleContext.EXPRESSION);
+        Token token = peek();
+        switch (token.kind) {
+            case FLOAT_LITERAL:
+            case INT_LITERAL:
+            case HEX_LITERAL:
+                parseLiteral();
+                break;
+            case IDENTIFIER:
+                parseVariableName();
+                break;
+            default:
+                recover(token, ParserRuleContext.EXPRESSION);
+                break;
+        }
+
+        revertContext();
+    }
+
+    private void parseLiteral() {
+        this.listner.exitLiteral(consume()); // literal
     }
 }

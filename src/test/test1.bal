@@ -46,6 +46,7 @@ public function ggg1() returns int {
 
 public function ggg2() returns int {
     int a=2;
+    a = 3;
     // some comment
     int a 9;
     int b;4;
@@ -61,5 +62,8 @@ public function hhh() {
 public function (iii)  {
 }
 
-function )
+public function jjj() {
+    a = 3;
+    = 6;
+}
 

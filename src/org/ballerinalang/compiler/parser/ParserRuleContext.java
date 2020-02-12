@@ -34,7 +34,9 @@ public enum ParserRuleContext {
     FUNC_BODY_BLOCK("func-body-block"),
     EXPRESSION("expression"),
     RETURN_TYPE_DESCRIPTOR("return-type-desc"),
-    
+    ASSIGNMENT_STMT("assignment-stmt"),
+    VAR_DEF_STMT("var-def-stmt"),
+
     // terminals
     FUNCTION_KEYWORD("function"),
     FUNC_NAME("function-name"),

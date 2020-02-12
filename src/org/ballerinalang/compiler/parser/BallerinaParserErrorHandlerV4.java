@@ -156,7 +156,13 @@ public class BallerinaParserErrorHandlerV4 {
     }
 
     private boolean isProductionWithAlternatives(ParserRuleContext currentCtx) {
-        return currentCtx == ParserRuleContext.FUNC_BODY;
+        switch (currentCtx) {
+            case STATEMENT:
+            case FUNC_BODY:
+                return true;
+            default:
+                return false;
+        }
     }
 
     /*
@@ -247,8 +253,7 @@ public class BallerinaParserErrorHandlerV4 {
 
                     // This means there are no matches for the function body
                     if (funcBodyBlockResult.matches == 0 && externFuncResult.matches == 0) {
-                        hasMatch = true;
-                        break;
+                        return new Result(fixes, matchingRulesCount);
                     }
 
                     if (funcBodyBlockResult.matches >= externFuncResult.matches) { // matches to function body block
@@ -257,7 +262,7 @@ public class BallerinaParserErrorHandlerV4 {
                             fixes.add(item); // add() here instead of push() to maintain the same order
                         }
                     } else { // matches to external function
-                        matchingRulesCount += externFuncResult.matches + 1;
+                        matchingRulesCount += externFuncResult.matches;
                         for (Solution item : externFuncResult.fixes) {
                             fixes.add(item); // add() here instead of push() to maintain the same order
                         }
@@ -291,6 +296,47 @@ public class BallerinaParserErrorHandlerV4 {
                     hasMatch = nextToken.kind == TokenKind.IDENTIFIER;
                     break;
 
+                case STATEMENT:
+                    if (nextToken.kind == TokenKind.SEMICOLON) {
+                        Result result = seekMatchInSubTree(lookahead + 1, currentDepth, ParserRuleContext.STATEMENT);
+                        fixes.add(
+                                new Solution(Action.REMOVE, currentContext, getParentContext(), nextToken.toString()));
+                        fixes.addAll(result.fixes);
+                        matchingRulesCount += result.matches;
+                        return new Result(fixes, matchingRulesCount);
+                    } else if (isEndOfBlock(nextToken)) {
+                        skipRule = true;
+                        break;
+                    }
+
+                    Result stmt1 = seekMatchInSubTree(lookahead, currentDepth, ParserRuleContext.ASSIGNMENT_STMT);
+                    Result stmt2 = seekMatchInSubTree(lookahead, currentDepth, ParserRuleContext.VAR_DEF_STMT);
+
+                    // This means there are no matches for any of the statements
+                    if (stmt1.matches == 0 && stmt2.matches == 0) {
+                        return new Result(fixes, matchingRulesCount);
+                    }
+
+                    Result selection;
+                    if (stmt1.matches == stmt2.matches) {
+                        // during a tie, select the path that requires the lowet amount of fixes.
+                        if (stmt1.fixes.size() <= stmt2.fixes.size()) {
+                            selection = stmt1;
+                        } else {
+                            selection = stmt2;
+                        }
+                    } else if (stmt1.matches > stmt2.matches) { // matches to function body block
+                        selection = stmt1;
+                    } else { // matches to external function
+                        selection = stmt2;
+                    }
+
+                    matchingRulesCount += selection.matches;
+                    for (Solution item : selection.fixes) {
+                        fixes.add(item); // add() here instead of push() to maintain the same order
+                    }
+                    return new Result(fixes, matchingRulesCount);
+
                 // productions
                 case EXPRESSION:
                     hasMatch = hasMatchInExpression(nextToken);
@@ -301,13 +347,13 @@ public class BallerinaParserErrorHandlerV4 {
                 case RETURN_TYPE_DESCRIPTOR:
                 case EXTERNAL_FUNC_BODY:
                 case FUNC_BODY_BLOCK:
-                case STATEMENT:
+                case ASSIGNMENT_STMT:
+                case VAR_DEF_STMT:
+                default:
                     // stay at the same place
                     skipRule = true;
                     hasMatch = true;
                     break;
-                default:
-                    return new Result(matchingRulesCount);
             }
 
             if (!hasMatch) {
@@ -367,7 +413,7 @@ public class BallerinaParserErrorHandlerV4 {
     }
 
     private ParserRuleContext getNextRule(ParserRuleContext currentContext, int nextLookahead) {
-        // If this is a production then push the context to the stack.
+        // If this is a production, then push the context to the stack.
         // We can do this within the below switch-case. But doing it separately
         // for the sake of maintainability.
         switch (currentContext) {
@@ -378,6 +424,8 @@ public class BallerinaParserErrorHandlerV4 {
             case EXTERNAL_FUNC_BODY:
             case FUNC_BODY_BLOCK:
             case STATEMENT:
+            case VAR_DEF_STMT:
+            case ASSIGNMENT_STMT:
                 pushContext(currentContext);
             default:
                 break;
@@ -394,16 +442,21 @@ public class BallerinaParserErrorHandlerV4 {
             case RETURN_TYPE_DESCRIPTOR:
                 return ParserRuleContext.RETURNS_KEYWORD;
             case EXTERNAL_FUNC_BODY:
-                return ParserRuleContext.EXTERNAL_KEYWORD;
+                return ParserRuleContext.ASSIGN_OP;
             case FUNC_BODY_BLOCK:
                 return ParserRuleContext.OPEN_BRACE;
             case STATEMENT:
-                return ParserRuleContext.TYPE_DESCRIPTOR;
+                if (isEndOfBlock(this.tokenReader.peek(nextLookahead))) {
+                    popContext(); // end statement
+                    return ParserRuleContext.CLOSE_BRACE;
+                } else {
+                    throw new IllegalStateException();
+                }
             case ASSIGN_OP:
                 parentCtx = getParentContext();
                 if (parentCtx == ParserRuleContext.EXTERNAL_FUNC_BODY) {
                     return ParserRuleContext.EXTERNAL_KEYWORD;
-                } else if (parentCtx == ParserRuleContext.STATEMENT) {
+                } else if (isStatement(parentCtx)) {
                     return ParserRuleContext.EXPRESSION;
                 } else {
                     throw new IllegalStateException();
@@ -445,26 +498,29 @@ public class BallerinaParserErrorHandlerV4 {
                 return ParserRuleContext.TYPE_DESCRIPTOR;
             case SEMICOLON:
                 parentCtx = getParentContext();
-                switch (parentCtx) {
-                    case EXTERNAL_FUNC_BODY:
-                        popContext(); // end external func
-                        return ParserRuleContext.TOP_LEVEL_NODE;
-                    case EXPRESSION:
-                        popContext(); // end expression
-                        // A semicolon after an expression also means its an end 
-                        // of a statement, Hence fall through.
-                    case STATEMENT:
-                        popContext(); // end statement
-                        if (isEndOfBlock(this.tokenReader.peek(nextLookahead))) {
-                            return ParserRuleContext.CLOSE_BRACE;
-                        }
-                        return ParserRuleContext.STATEMENT;
-                    default:
-                        throw new IllegalStateException();
+                if (parentCtx == ParserRuleContext.EXTERNAL_FUNC_BODY) {
+                    popContext(); // end external func
+                    return ParserRuleContext.TOP_LEVEL_NODE;
+                } else if (isExpression(parentCtx)) {
+                    popContext(); // end expression
+                    // A semicolon after an expression also means its an end of a statement, Hence pop the ctx again.
+                    popContext(); // end statement
+                    if (isEndOfBlock(this.tokenReader.peek(nextLookahead))) {
+                        return ParserRuleContext.CLOSE_BRACE;
+                    }
+                    return ParserRuleContext.STATEMENT;
+                } else if (isStatement(parentCtx)) {
+                    popContext(); // end statement
+                    if (isEndOfBlock(this.tokenReader.peek(nextLookahead))) {
+                        return ParserRuleContext.CLOSE_BRACE;
+                    }
+                    return ParserRuleContext.STATEMENT;
+                } else {
+                    throw new IllegalStateException();
                 }
             case TYPE_DESCRIPTOR:
                 parentCtx = getParentContext();
-                if (parentCtx == ParserRuleContext.STATEMENT) {
+                if (isStatement(parentCtx)) {
                     return ParserRuleContext.VARIABLE_NAME;
                 } else if (parentCtx == ParserRuleContext.RETURN_TYPE_DESCRIPTOR) {
                     return ParserRuleContext.FUNC_BODY;
@@ -479,10 +535,23 @@ public class BallerinaParserErrorHandlerV4 {
                 return ParserRuleContext.TOP_LEVEL_NODE;
             case PARAMETER:
                 return ParserRuleContext.CLOSE_PARANTHESIS;
+            case ASSIGNMENT_STMT:
+                return ParserRuleContext.VARIABLE_NAME;
+            case VAR_DEF_STMT:
+                return ParserRuleContext.TYPE_DESCRIPTOR;
             case ANNOTATION_ATTACHMENT:
             default:
-                throw new IllegalStateException();
+                throw new IllegalStateException("cannot find the next rule for: " + currentContext);
         }
+    }
+
+    private boolean isStatement(ParserRuleContext parentCtx) {
+        return parentCtx == ParserRuleContext.STATEMENT || parentCtx == ParserRuleContext.VAR_DEF_STMT ||
+                parentCtx == ParserRuleContext.ASSIGNMENT_STMT;
+    }
+
+    private boolean isExpression(ParserRuleContext parentCtx) {
+        return parentCtx == ParserRuleContext.EXPRESSION;
     }
 
     private boolean hasMatchInExpression(Token nextToken) {

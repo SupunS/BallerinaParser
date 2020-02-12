@@ -18,6 +18,7 @@
 package org.ballerinalang.compiler.parser.tree;
 
 public class VarDefStmtNode extends ASTNode {
+
     public ASTNode type;
     public ASTNode varName;
     public ASTNode assign;

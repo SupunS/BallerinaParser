@@ -18,6 +18,7 @@
 package org.ballerinalang.compiler.parser;
 
 import org.ballerinalang.compiler.parser.tree.ASTNode;
+import org.ballerinalang.compiler.parser.tree.AssignmentStmtNode;
 import org.ballerinalang.compiler.parser.tree.EmptyNode;
 import org.ballerinalang.compiler.parser.tree.InvalidNode;
 import org.ballerinalang.compiler.parser.tree.LiteralNode;
@@ -184,5 +185,14 @@ public class BallerinaParserListener {
 
     public void exitLiteral(Token token) {
         this.nodesStack.push(new LiteralNode(token));
+    }
+
+    public void exitAssignmentStmt() {
+        AssignmentStmtNode assignmentStmt = new AssignmentStmtNode();
+        assignmentStmt.semicolon = this.nodesStack.pop();
+        assignmentStmt.expr = this.nodesStack.pop();
+        assignmentStmt.assign = this.nodesStack.pop();
+        assignmentStmt.varRef = this.nodesStack.pop();
+        this.statements.add(assignmentStmt);
     }
 }
