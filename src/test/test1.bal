@@ -53,3 +53,13 @@ public function ggg2() returns int {
     int;
     int (= =d;
 }
+
+public function hhh() {
+    int a=2
+}
+
+public function (iii)  {
+}
+
+function )
+

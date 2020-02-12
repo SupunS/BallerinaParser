@@ -86,6 +86,7 @@ public class BallerinaParserErrorHandlerV4 {
 
         if (nextToken.kind == TokenKind.EOF) {
             reportMissingTokenError("missing " + currentContext);
+            this.listner.addMissingNode(currentContext.toString());
             return;
         }
 
@@ -124,8 +125,8 @@ public class BallerinaParserErrorHandlerV4 {
                 // Fix this redundant operation.
                 this.parser.parse(fix.enclosingCtx);
             } else {
-                this.listner.addMissingNode(fix.ctx.toString());
                 reportMissingTokenError("missing " + fix.ctx);
+                this.listner.addMissingNode(fix.ctx.toString());
             }
         }
     }
@@ -444,17 +445,22 @@ public class BallerinaParserErrorHandlerV4 {
                 return ParserRuleContext.TYPE_DESCRIPTOR;
             case SEMICOLON:
                 parentCtx = getParentContext();
-                if (parentCtx == ParserRuleContext.EXTERNAL_FUNC_BODY) {
-                    popContext(); // end external func
-                    return ParserRuleContext.TOP_LEVEL_NODE;
-                } else if (parentCtx == ParserRuleContext.STATEMENT) {
-                    popContext(); // end func statement
-                    if (isEndOfBlock(this.tokenReader.peek(nextLookahead))) {
-                        return ParserRuleContext.CLOSE_BRACE;
-                    }
-                    return ParserRuleContext.STATEMENT;
-                } else {
-                    throw new IllegalStateException();
+                switch (parentCtx) {
+                    case EXTERNAL_FUNC_BODY:
+                        popContext(); // end external func
+                        return ParserRuleContext.TOP_LEVEL_NODE;
+                    case EXPRESSION:
+                        popContext(); // end expression
+                        // A semicolon after an expression also means its an end 
+                        // of a statement, Hence fall through.
+                    case STATEMENT:
+                        popContext(); // end statement
+                        if (isEndOfBlock(this.tokenReader.peek(nextLookahead))) {
+                            return ParserRuleContext.CLOSE_BRACE;
+                        }
+                        return ParserRuleContext.STATEMENT;
+                    default:
+                        throw new IllegalStateException();
                 }
             case TYPE_DESCRIPTOR:
                 parentCtx = getParentContext();
