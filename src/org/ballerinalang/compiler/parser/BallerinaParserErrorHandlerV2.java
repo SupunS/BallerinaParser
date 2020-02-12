@@ -250,7 +250,7 @@ public class BallerinaParserErrorHandlerV2 {
      */
     private boolean isEndOfBlock(Token token) {
         switch (token.kind) {
-            case RIGHT_BRACE:
+            case CLOSE_BRACE:
             case PUBLIC:
             case FUNCTION:
             case EOF:
@@ -282,7 +282,7 @@ public class BallerinaParserErrorHandlerV2 {
 
             switch (context) {
                 case OPEN_PARANTHESIS:
-                    if (nextToken.kind != TokenKind.LEFT_PARANTHESIS) {
+                    if (nextToken.kind != TokenKind.OPEN_PARANTHESIS) {
                         isMismatch = true;
                         break;
                     }
@@ -298,13 +298,13 @@ public class BallerinaParserErrorHandlerV2 {
                     context = ParserRuleContext.CLOSE_PARANTHESIS;
                     break;
                 case CLOSE_PARANTHESIS:
-                    if (nextToken.kind != TokenKind.RIGHT_PARANTHESIS) {
+                    if (nextToken.kind != TokenKind.CLOSE_PARANTHESIS) {
                         isMismatch = true;
                         break;
                     }
-                    context = ParserRuleContext.RETURNS;
+                    context = ParserRuleContext.RETURNS_KEYWORD;
                     break;
-                case RETURNS:
+                case RETURNS_KEYWORD:
                     if (nextToken.kind != TokenKind.RETURNS) {
                         context = ParserRuleContext.FUNC_BODY;
                         break;
@@ -334,14 +334,14 @@ public class BallerinaParserErrorHandlerV2 {
                     return matchingRulesCount;
                 case FUNC_BODY_BLOCK:
                 case OPEN_BRACE:
-                    if (nextToken.kind != TokenKind.LEFT_BRACE) {
+                    if (nextToken.kind != TokenKind.OPEN_BRACE) {
                         isMismatch = true;
                         break;
                     }
                     context = ParserRuleContext.CLOSE_BRACE;
                     break;
                 case CLOSE_BRACE:
-                    if (nextToken.kind != TokenKind.RIGHT_BRACE) {
+                    if (nextToken.kind != TokenKind.CLOSE_BRACE) {
                         isMismatch = true;
                         break;
                     }

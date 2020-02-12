@@ -255,7 +255,7 @@ public class BallerinaParserErrorHandlerV3 {
      */
     private boolean isEndOfBlock(Token token) {
         switch (token.kind) {
-            case RIGHT_BRACE:
+            case CLOSE_BRACE:
             case PUBLIC:
             case FUNCTION:
             case EOF:
@@ -310,7 +310,7 @@ public class BallerinaParserErrorHandlerV3 {
                 case FUNC_SIGNATURE:
                 case OPEN_PARANTHESIS:
                     nextContext = ParserRuleContext.CLOSE_PARANTHESIS;
-                    if (nextToken.kind != TokenKind.LEFT_PARANTHESIS) {
+                    if (nextToken.kind != TokenKind.OPEN_PARANTHESIS) {
                         mismatchFound = true;
                     }
                     break;
@@ -325,12 +325,12 @@ public class BallerinaParserErrorHandlerV3 {
                     nextContext = ParserRuleContext.CLOSE_PARANTHESIS;
                     break;
                 case CLOSE_PARANTHESIS:
-                    nextContext = ParserRuleContext.RETURNS;
-                    if (nextToken.kind != TokenKind.RIGHT_PARANTHESIS) {
+                    nextContext = ParserRuleContext.RETURNS_KEYWORD;
+                    if (nextToken.kind != TokenKind.CLOSE_PARANTHESIS) {
                         mismatchFound = true;
                     }
                     break;
-                case RETURNS:
+                case RETURNS_KEYWORD:
                     // TODO: this is optional. handle optional rules
                     if (nextToken.kind != TokenKind.RETURNS) {
                         // if there are no matches in the optional rule, then continue from the
@@ -381,14 +381,14 @@ public class BallerinaParserErrorHandlerV3 {
                 case FUNC_BODY_BLOCK:
                 case OPEN_BRACE:
                     nextContext = ParserRuleContext.CLOSE_BRACE;
-                    if (nextToken.kind != TokenKind.LEFT_BRACE) {
+                    if (nextToken.kind != TokenKind.OPEN_BRACE) {
                         mismatchFound = true;
                         break;
                     }
                     break;
                 case CLOSE_BRACE:
                     nextContext = ParserRuleContext.TOP_LEVEL_NODE;
-                    if (nextToken.kind != TokenKind.RIGHT_BRACE) {
+                    if (nextToken.kind != TokenKind.CLOSE_BRACE) {
                         mismatchFound = true;
                     }
                     break;

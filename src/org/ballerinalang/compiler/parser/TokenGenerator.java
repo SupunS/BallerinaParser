@@ -68,27 +68,27 @@ public class TokenGenerator {
     }
 
     public Token getLeftParanthesis() {
-        return newToken("(", TokenKind.LEFT_PARANTHESIS);
+        return newToken("(", TokenKind.OPEN_PARANTHESIS);
     }
 
     public Token getRigthtParanthesis() {
-        return newToken(")", TokenKind.RIGHT_PARANTHESIS);
+        return newToken(")", TokenKind.CLOSE_PARANTHESIS);
     }
 
     public Token getLeftBrace() {
-        return newToken("{", TokenKind.LEFT_BRACE);
+        return newToken("{", TokenKind.OPEN_BRACE);
     }
 
     public Token getRightBrace() {
-        return newToken("}", TokenKind.RIGHT_BRACE);
+        return newToken("}", TokenKind.CLOSE_BRACE);
     }
 
     public Token getLeftBracket() {
-        return newToken("[", TokenKind.LEFT_BRACKET);
+        return newToken("[", TokenKind.OPEN_BRACKET);
     }
 
     public Token getRightBracket() {
-        return newToken("]", TokenKind.RIGHT_BRACKET);
+        return newToken("]", TokenKind.CLOSE_BRACKET);
     }
 
     public Token getAssignOp() {

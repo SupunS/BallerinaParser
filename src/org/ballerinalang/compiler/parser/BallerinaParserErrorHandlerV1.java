@@ -60,7 +60,7 @@ public class BallerinaParserErrorHandlerV1 {
                 break;
             case PARAM_LIST:
                 break;
-            case RETURNS:
+            case RETURNS_KEYWORD:
                 recoverReturnTypeDescriptor(nextToken);
                 break;
             case TYPE_DESCRIPTOR:
@@ -151,7 +151,7 @@ public class BallerinaParserErrorHandlerV1 {
     }
 
     private void recoverReturnTypeDescriptor(Token nextToken) {
-        if (prune(nextToken, ParserRuleContext.RETURNS)) {
+        if (prune(nextToken, ParserRuleContext.RETURNS_KEYWORD)) {
             return;
         }
 
@@ -333,7 +333,7 @@ public class BallerinaParserErrorHandlerV1 {
      */
     private boolean isEndOfBlock(Token token) {
         switch (token.kind) {
-            case RIGHT_BRACE:
+            case CLOSE_BRACE:
             case PUBLIC:
             case FUNCTION:
             case EOF:
@@ -356,7 +356,7 @@ public class BallerinaParserErrorHandlerV1 {
         ParserRuleContext nextContext;
         switch (currentContext) {
             case OPEN_PARANTHESIS:
-                if (nextToken.kind == TokenKind.LEFT_PARANTHESIS) {
+                if (nextToken.kind == TokenKind.OPEN_PARANTHESIS) {
                     return true;
                 }
 
@@ -370,12 +370,12 @@ public class BallerinaParserErrorHandlerV1 {
                 nextContext = ParserRuleContext.CLOSE_PARANTHESIS;
                 break;
             case CLOSE_PARANTHESIS:
-                if (nextToken.kind == TokenKind.RIGHT_PARANTHESIS) {
+                if (nextToken.kind == TokenKind.CLOSE_PARANTHESIS) {
                     return true;
                 }
-                nextContext = ParserRuleContext.RETURNS;
+                nextContext = ParserRuleContext.RETURNS_KEYWORD;
                 break;
-            case RETURNS:
+            case RETURNS_KEYWORD:
                 if (nextToken.kind == TokenKind.RETURNS) {
                     return true;
                 }
@@ -395,13 +395,13 @@ public class BallerinaParserErrorHandlerV1 {
                 break;
             case FUNC_BODY_BLOCK:
             case OPEN_BRACE:
-                if (nextToken.kind == TokenKind.LEFT_BRACE) {
+                if (nextToken.kind == TokenKind.OPEN_BRACE) {
                     return true;
                 }
                 nextContext = ParserRuleContext.CLOSE_BRACE;
                 break;
             case CLOSE_BRACE:
-                return nextToken.kind == TokenKind.RIGHT_BRACE;
+                return nextToken.kind == TokenKind.CLOSE_BRACE;
             case COMP_UNIT:
             case ANNOTATION_ATTACHMENT:
                 nextContext = ParserRuleContext.EXTERNAL_KEYWORD;

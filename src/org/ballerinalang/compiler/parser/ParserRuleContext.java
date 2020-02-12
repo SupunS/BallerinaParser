@@ -21,26 +21,26 @@ public enum ParserRuleContext {
 
     // productions
 
-    TOP_LEVEL_NODE(null),
-    COMP_UNIT(null),
-    FUNC_DEFINITION(null),
-    STATEMENT(null),
+    COMP_UNIT("comp-unit"),
+    TOP_LEVEL_NODE("top-level-node"),
+    FUNC_DEFINITION("func-definition"),
+    STATEMENT("statement"),
     PARAM_LIST("parameters"),
     PARAMETER("parameter"),
     ANNOTATION_ATTACHMENT("annotation"),
-    FUNC_BODY("function body"),
-    FUNC_SIGNATURE("function signature"),
-    EXTERNAL_FUNC_BODY("external function body"),
-    FUNC_BODY_BLOCK("function body"),
+    FUNC_BODY("func-body"),
+    FUNC_SIGNATURE("func-signature"),
+    EXTERNAL_FUNC_BODY("external-func-body"),
+    FUNC_BODY_BLOCK("func-body-block"),
     EXPRESSION("expression"),
-    RETURN_TYPE_DESCRIPTOR("return type desc"),
+    RETURN_TYPE_DESCRIPTOR("return-type-desc"),
     
     // terminals
-
-    FUNC_NAME("function name"),
+    FUNCTION_KEYWORD("function"),
+    FUNC_NAME("function-name"),
     OPEN_PARANTHESIS("("),
     CLOSE_PARANTHESIS(")"),
-    RETURNS("returns"),
+    RETURNS_KEYWORD("returns"),
     TYPE_DESCRIPTOR("type"),
     OPEN_BRACE("{"),
     CLOSE_BRACE("}"),

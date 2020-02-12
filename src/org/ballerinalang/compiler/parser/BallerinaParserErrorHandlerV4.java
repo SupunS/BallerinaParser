@@ -19,8 +19,6 @@ package org.ballerinalang.compiler.parser;
 
 import java.util.ArrayDeque;
 import java.util.Arrays;
-import java.util.HashMap;
-import java.util.Map;
 
 public class BallerinaParserErrorHandlerV4 {
 
@@ -28,25 +26,32 @@ public class BallerinaParserErrorHandlerV4 {
     private final BallerinaParserListener listner;
     private final BallerinaParser parser;
 
-    private ArrayDeque<ParserRuleContext> enclosingContext = new ArrayDeque<>();
+    private ArrayDeque<ParserRuleContext> ctxStack = new ArrayDeque<>();
 
     /**
      * Limit for the distance to travel, to determine a successful lookahead.
      */
     private static final int LOOKAHEAD_LIMIT = 5;
 
-    private Map<Key, Solution> recoveryCache = new HashMap<>();
+    // private Map<Key, Solution> recoveryCache = new HashMap<>();
 
     public BallerinaParserErrorHandlerV4(TokenReader tokenReader, BallerinaParserListener listner,
             BallerinaParser parser) {
         this.tokenReader = tokenReader;
         this.listner = listner;
         this.parser = parser;
-        this.enclosingContext.push(ParserRuleContext.COMP_UNIT);
     }
 
-    public void setEnclosingContext(ParserRuleContext context) {
-        this.enclosingContext.push(context);
+    public void pushContext(ParserRuleContext context) {
+        this.ctxStack.push(context);
+    }
+
+    public void popContext() {
+        this.ctxStack.pop();
+    }
+
+    private ParserRuleContext getParentContext() {
+        return this.ctxStack.peek();
     }
 
     /*
@@ -72,16 +77,15 @@ public class BallerinaParserErrorHandlerV4 {
     public void recover(Token nextToken, ParserRuleContext currentContext) {
         // Assumption: always comes here after a peek()
 
-        Key key = new Key(nextToken, currentContext);
-        Solution fromCace = this.recoveryCache.get(key);
-        if (fromCace != null) {
-            applyFix(fromCace);
-            return;
-        }
+        // Key key = new Key(nextToken, currentContext);
+        // Solution fromCace = this.recoveryCache.get(key);
+        // if (fromCace != null) {
+        // applyFix(fromCace);
+        // return;
+        // }
 
         if (nextToken.kind == TokenKind.EOF) {
             reportMissingTokenError("missing " + currentContext);
-            this.listner.addMissingNode(currentContext.toString());
             return;
         }
 
@@ -89,12 +93,12 @@ public class BallerinaParserErrorHandlerV4 {
         if (bestMatch.matches > 0) {
 
             // Add to cache
-            for (Solution item : bestMatch.fixes) {
-                this.recoveryCache.put(new Key(nextToken, item.ctx), item);
-            }
+            // for (Solution item : bestMatch.fixes) {
+            // this.recoveryCache.put(new Key(nextToken, item.ctx), item);
+            // }
 
             Solution fix = bestMatch.fixes.pop();
-            applyFix(fix);
+            applyFix(fix, currentContext);
         } else {
             // fail safe
             // this means we can't find a path to recover
@@ -103,50 +107,36 @@ public class BallerinaParserErrorHandlerV4 {
     }
 
     /**
-     * @param actionItem
+     * @param fix
+     * @param currentCtx
      */
-    private void applyFix(Solution actionItem) {
-        if (actionItem.action == Action.REMOVE) {
+    private void applyFix(Solution fix, ParserRuleContext currentCtx) {
+        if (fix.action == Action.REMOVE) {
             removeInvalidToken();
-            this.parser.parse(actionItem.ctx);
+            this.parser.parse(currentCtx);
         } else {
-            reportMissingTokenError("missing " + actionItem.ctx);
-            this.listner.addMissingNode(actionItem.ctx.toString());
-            // this.parser.parse(actionItem.nextCtx);
+            if (isProductionWithAlternatives(currentCtx)) {
+                // If the original issues was at the production where there are alternatives,
+                // then try to re-parse the matched alternative without reporting errors.
+                // Errors will be reported at the next try.
+
+                // TODO: This will cause the parser to recover from the same issue twice.
+                // Fix this redundant operation.
+                this.parser.parse(fix.enclosingCtx);
+            } else {
+                this.listner.addMissingNode(fix.ctx.toString());
+                reportMissingTokenError("missing " + fix.ctx);
+            }
         }
     }
 
-    private Result tryToFixAndContinue(int k, int depth, ParserRuleContext currentContext,
-                                       ParserRuleContext nextContext) {
-        // insert the missing token. That means continue the CURRENT token, with the NEXT Context
-        Result insertionResult;
-        if (currentContext != nextContext) {
-            insertionResult = seekMatch(k, depth, nextContext);
-        } else {
-            insertionResult = new Result();
+    private ArrayDeque<ParserRuleContext> cloneCtxStack() {
+        ArrayDeque<ParserRuleContext> stackCopy = new ArrayDeque<>();
+        for (ParserRuleContext ctx : ctxStack) {
+            stackCopy.add(ctx);
         }
 
-        // remove current token. That means continue with the NEXT token, with the CURRENT context
-        Result deletionResult = seekMatch(k + 1, depth, currentContext);
-        // Result y = new Result(0);
-
-        Result result;
-        Solution action;
-        if (insertionResult.matches == 0 && deletionResult.matches == 0) {
-            result = insertionResult;
-        } else if (insertionResult.matches >= deletionResult.matches) {
-            // insertToken(currentContext, nextContext[0]);
-            action = new Solution(Action.INSERT, currentContext, currentContext.toString());
-            insertionResult.fixes.push(action);
-            result = insertionResult;
-        } else {
-            // removeToken(currentContext, nextContext[0]);
-            action = new Solution(Action.REMOVE, currentContext, this.tokenReader.peek(k).text);
-            deletionResult.fixes.push(action);
-            result = deletionResult;
-        }
-
-        return result;
+        return stackCopy;
     }
 
     public void removeInvalidToken() {
@@ -164,122 +154,25 @@ public class BallerinaParserErrorHandlerV4 {
         reportMissingTokenError(currentToken, message);
     }
 
+    private boolean isProductionWithAlternatives(ParserRuleContext currentCtx) {
+        return currentCtx == ParserRuleContext.FUNC_BODY;
+    }
+
     /*
      * seekMatch methods
      */
 
     private Result seekMatch(ParserRuleContext currentContext) {
         // start a fresh seek with the next immediate token (peek(1), and the current context)
-        return seekMatch(1, 0, currentContext);
+        return seekMatchInSubTree(1, 0, currentContext);
     }
 
-    private Result seekMatch(int k, int currentDepth, ParserRuleContext currentContext) {
-        switch (this.enclosingContext.peek()) {
-            case FUNC_DEFINITION:
-            case TOP_LEVEL_NODE:
-            case COMP_UNIT:
-            case FUNC_BODY:
-            case FUNC_SIGNATURE:
-            case EXTERNAL_FUNC_BODY:
-            case FUNC_BODY_BLOCK:
-            case PARAM_LIST:
-            case PARAMETER:
-            case ANNOTATION_ATTACHMENT:
-            case RETURN_TYPE_DESCRIPTOR:
-                return seekMatchInFunction(k, currentDepth, currentContext);
-            case STATEMENT:
-                return seekMatchInStatement(k, currentDepth, currentContext);
-            case EXPRESSION:
-            default:
-                return new Result();
-        }
-    }
-
-    private Result seekMatchInStatement(int k, int currentDepth, ParserRuleContext currentContext) {
-        ArrayDeque<Solution> actionItems = new ArrayDeque<>();
-        int matchingRulesCount = 0;
-
-        ParserRuleContext nextContext = currentContext;
-        boolean mismatchFound = false;
-        while (currentDepth <= LOOKAHEAD_LIMIT) {
-            Token nextToken = this.tokenReader.peek(k);
-            if (nextToken.kind == TokenKind.EOF) {
-                break;
-            }
-
-            currentDepth++;
-            switch (currentContext) {
-                case STATEMENT:
-                case TYPE_DESCRIPTOR:
-                    nextContext = ParserRuleContext.VARIABLE_NAME;
-                    if (nextToken.kind != TokenKind.TYPE) {
-                        mismatchFound = true;
-                    }
-                    break;
-                case VARIABLE_NAME:
-                    nextContext = ParserRuleContext.ASSIGN_OP;
-                    if (nextToken.kind != TokenKind.IDENTIFIER) {
-                        mismatchFound = true;
-                    }
-                    break;
-                case ASSIGN_OP:
-                    nextContext = ParserRuleContext.EXPRESSION;
-                    if (nextToken.kind != TokenKind.ASSIGN) {
-                        mismatchFound = true;
-                    }
-                    break;
-                case EXPRESSION:
-                    // FIXME: alternative paths
-                    nextContext = ParserRuleContext.SEMICOLON;
-                    if (!hasMatchInExpression(nextToken)) {
-                        mismatchFound = true;
-                    }
-                    break;
-                case SEMICOLON:
-                    // FIXME: alternative paths
-                    if (nextToken.kind != TokenKind.SEMICOLON) {
-                        if (isEndOfBlock(nextToken)) {
-
-                            // FIXME: this doesnt work. Properly switch back to the function context.
-                            // Make sure to revert back to the current context when unwinding.
-
-                            // this.enclosingContext = ParserRuleContext.FUNC_DEFINITION;
-                            nextContext = ParserRuleContext.CLOSE_BRACE;
-                        } else {
-                            nextContext = ParserRuleContext.STATEMENT;
-                        }
-                        mismatchFound = true;
-                        break;
-                    }
-
-                    matchingRulesCount++;
-                    return new Result(actionItems, matchingRulesCount);
-                default:
-                    return new Result(matchingRulesCount);
-            }
-
-            if (mismatchFound) {
-                Result fixedPathResult = tryToFixAndContinue(k, currentDepth, currentContext, nextContext);
-                for (Solution item : fixedPathResult.fixes) {
-                    actionItems.add(item); // add() here instead of push() to maintain the same order
-                }
-
-                matchingRulesCount += fixedPathResult.matches;
-
-                // Do not consider the current rule as match, since we had to fix it.
-                // i.e: do not increment the match count by 1;
-                // if (fixedPathResult.matches > 0) {
-                //// matchingRulesCount++;
-                // }
-                break;
-            }
-
-            // Try the next token against the next rule
-            matchingRulesCount++;
-            k++;
-        }
-
-        return new Result(actionItems, matchingRulesCount);
+    private Result seekMatchInSubTree(int lookahead, int currentDepth, ParserRuleContext currentContext) {
+        ArrayDeque<ParserRuleContext> tempCtxStack = this.ctxStack;
+        this.ctxStack = cloneCtxStack();
+        Result result = seekMatch(lookahead, currentDepth, currentContext);
+        this.ctxStack = tempCtxStack;
+        return result;
     }
 
     /**
@@ -290,7 +183,7 @@ public class BallerinaParserErrorHandlerV4 {
      */
     private boolean isEndOfBlock(Token token) {
         switch (token.kind) {
-            case RIGHT_BRACE:
+            case CLOSE_BRACE:
             case PUBLIC:
             case FUNCTION:
             case EOF:
@@ -300,99 +193,60 @@ public class BallerinaParserErrorHandlerV4 {
         }
     }
 
-    /**
-     * @param nextToken
-     * @return
-     */
-    private boolean hasMatchInExpression(Token nextToken) {
-        switch (nextToken.kind) {
-            case INT_LITERAL:
-            case FLOAT_LITERAL:
-            case HEX_LITERAL:
-            case IDENTIFIER:
-                return true;
-            default:
-                return false;
-        }
-    }
-
-    private Result seekMatchInFunction(int k, int currentDepth, ParserRuleContext currentContext) {
-        boolean mismatchFound = false;
+    private Result seekMatch(int lookahead, int currentDepth, ParserRuleContext currentContext) {
+        boolean hasMatch;
+        boolean skipRule;
         ArrayDeque<Solution> fixes = new ArrayDeque<>();
         int matchingRulesCount = 0;
 
-        ParserRuleContext nextContext = currentContext;
         while (currentDepth <= LOOKAHEAD_LIMIT) {
-            Token nextToken = this.tokenReader.peek(k);
+            hasMatch = true;
+            skipRule = false;
+
+            Token nextToken = this.tokenReader.peek(lookahead);
             if (nextToken.kind == TokenKind.EOF) {
                 break;
             }
 
-            currentDepth++;
-            switch (nextContext) {
-                case FUNC_DEFINITION:
-                    nextContext = ParserRuleContext.FUNC_NAME;
-                    if (nextToken.kind != TokenKind.FUNCTION) {
-                        mismatchFound = true;
-                    }
+            switch (currentContext) {
+                case FUNCTION_KEYWORD:
+                    hasMatch = nextToken.kind == TokenKind.FUNCTION;
                     break;
                 case FUNC_NAME:
-                    nextContext = ParserRuleContext.OPEN_PARANTHESIS;
-                    if (nextToken.kind != TokenKind.IDENTIFIER) {
-                        mismatchFound = true;
-                    }
+                    hasMatch = nextToken.kind == TokenKind.IDENTIFIER;
                     break;
-                case FUNC_SIGNATURE:
                 case OPEN_PARANTHESIS:
-                    nextContext = ParserRuleContext.CLOSE_PARANTHESIS;
-                    if (nextToken.kind != TokenKind.LEFT_PARANTHESIS) {
-                        mismatchFound = true;
-                    }
+                    hasMatch = nextToken.kind == TokenKind.OPEN_PARANTHESIS;
                     break;
                 case PARAM_LIST:
                     // TODO: if match, return the context
-                    nextContext = ParserRuleContext.PARAMETER;
                 case PARAMETER:
                     // TODO: if match, return the context
-                    k--; // stay at the same place
-                    matchingRulesCount--;
-                    currentDepth--;
-                    nextContext = ParserRuleContext.CLOSE_PARANTHESIS;
+                    skipRule = true;
                     break;
                 case CLOSE_PARANTHESIS:
-                    nextContext = ParserRuleContext.RETURNS;
-                    if (nextToken.kind != TokenKind.RIGHT_PARANTHESIS) {
-                        mismatchFound = true;
-                    }
+                    hasMatch = nextToken.kind == TokenKind.CLOSE_PARANTHESIS;
                     break;
-                case RETURNS:
-                    // TODO: this is optional. handle optional rules
-                    if (nextToken.kind != TokenKind.RETURNS) {
-                        // if there are no matches in the optional rule, then continue from the
+                case RETURNS_KEYWORD:
+                    hasMatch = nextToken.kind == TokenKind.RETURNS;
+                    if (!hasMatch) {
+                        // If there are no matches in the optional rule, then continue from the
                         // next immediate rule without changing the state
-
-                        k--; // stay at the same place
-                        matchingRulesCount--;
-                        currentDepth--;
-                        nextContext = ParserRuleContext.FUNC_BODY;
-                    } else {
-                        nextContext = ParserRuleContext.TYPE_DESCRIPTOR;
+                        skipRule = true;
                     }
                     break;
                 case TYPE_DESCRIPTOR:
-                    nextContext = ParserRuleContext.FUNC_BODY;
-                    if (nextToken.kind != TokenKind.TYPE) {
-                        mismatchFound = true;
-                    }
+                    hasMatch = nextToken.kind == TokenKind.TYPE;
                     break;
                 case FUNC_BODY:
                     Result funcBodyBlockResult =
-                            seekMatchInFunction(k, currentDepth, ParserRuleContext.OPEN_BRACE);
+                            seekMatchInSubTree(lookahead, currentDepth, ParserRuleContext.FUNC_BODY_BLOCK);
                     Result externFuncResult =
-                            seekMatchInFunction(k, currentDepth, ParserRuleContext.ASSIGN_OP);
+                            seekMatchInSubTree(lookahead, currentDepth, ParserRuleContext.EXTERNAL_FUNC_BODY);
 
+                    // This means there are no matches for the function body
                     if (funcBodyBlockResult.matches == 0 && externFuncResult.matches == 0) {
-                        mismatchFound = true;
+                        hasMatch = true;
                         break;
                     }
 
@@ -409,58 +263,54 @@ public class BallerinaParserErrorHandlerV4 {
                     }
 
                     return new Result(fixes, matchingRulesCount);
-                case FUNC_BODY_BLOCK:
                 case OPEN_BRACE:
-                    nextContext = ParserRuleContext.CLOSE_BRACE;
-                    if (nextToken.kind != TokenKind.LEFT_BRACE) {
-                        mismatchFound = true;
-                        break;
-                    }
+                    hasMatch = nextToken.kind == TokenKind.OPEN_BRACE;
                     break;
                 case CLOSE_BRACE:
-                    nextContext = ParserRuleContext.TOP_LEVEL_NODE;
-                    if (nextToken.kind != TokenKind.RIGHT_BRACE) {
-                        mismatchFound = true;
-                    }
+                    hasMatch = nextToken.kind == TokenKind.CLOSE_BRACE;
                     break;
-                case EXTERNAL_FUNC_BODY:// shouldn't reach
                 case ASSIGN_OP:
-                    nextContext = ParserRuleContext.ANNOTATION_ATTACHMENT;
-                    if (nextToken.kind != TokenKind.ASSIGN) {
-                        mismatchFound = true;
-                    }
+                    hasMatch = nextToken.kind == TokenKind.ASSIGN;
                     break;
                 case ANNOTATION_ATTACHMENT:
                 case EXTERNAL_KEYWORD:
-                    nextContext = ParserRuleContext.SEMICOLON;
-                    if (nextToken.kind != TokenKind.EXTERNAL) {
-                        mismatchFound = true;
-                    }
+                    hasMatch = nextToken.kind == TokenKind.EXTERNAL;
                     break;
                 case SEMICOLON:
-                    nextContext = ParserRuleContext.TOP_LEVEL_NODE;
-                    if (nextToken.kind != TokenKind.SEMICOLON) {
-                        mismatchFound = true;
-                    }
+                    hasMatch = nextToken.kind == TokenKind.SEMICOLON;
                     break;
                 case TOP_LEVEL_NODE:
-                    nextContext = ParserRuleContext.FUNC_DEFINITION;
-                    if (nextToken.kind == TokenKind.PUBLIC) {
-                        break;
+                    hasMatch = nextToken.kind == TokenKind.PUBLIC;
+                    // skip the optional rule if no match is found
+                    if (!hasMatch) {
+                        skipRule = true;
                     }
+                    break;
+                case VARIABLE_NAME:
+                    hasMatch = nextToken.kind == TokenKind.IDENTIFIER;
+                    break;
 
-                    // stay at the same place
-                    k--;
-                    matchingRulesCount--;
-                    currentDepth--;
+                // productions
+                case EXPRESSION:
+                    hasMatch = hasMatchInExpression(nextToken);
                     break;
                 case COMP_UNIT:
+                case FUNC_DEFINITION:
+                case FUNC_SIGNATURE:
+                case RETURN_TYPE_DESCRIPTOR:
+                case EXTERNAL_FUNC_BODY:
+                case FUNC_BODY_BLOCK:
+                case STATEMENT:
+                    // stay at the same place
+                    skipRule = true;
+                    hasMatch = true;
+                    break;
                 default:
                     return new Result(matchingRulesCount);
             }
 
-            if (mismatchFound) {
-                Result fixedPathResult = tryToFixAndContinue(k, currentDepth, currentContext, nextContext);
+            if (!hasMatch) {
+                Result fixedPathResult = fixAndContinue(lookahead, currentDepth + 1, currentContext);
                 for (Solution item : fixedPathResult.fixes) {
                     fixes.add(item); // add() here instead of push() to maintain the same order
                 }
@@ -469,15 +319,176 @@ public class BallerinaParserErrorHandlerV4 {
 
                 // Do not consider the current rule as match, since we had to fix it.
                 // i.e: do not increment the match count by 1;
-                break;
+                return new Result(fixes, matchingRulesCount);
             }
 
-            // Try the next token with the next rule
-            matchingRulesCount++;
-            k++;
+            currentContext = getNextRule(currentContext, lookahead + 1);
+
+            if (!skipRule) {
+                // Try the next token with the next rule
+                currentDepth++;
+                matchingRulesCount++;
+                lookahead++;
+            }
+
         }
 
         return new Result(fixes, matchingRulesCount);
+    }
+
+    private Result fixAndContinue(int lookahead, int currentDepth, ParserRuleContext currentContext) {
+        // NOTE: Below order is important. We have to visit the current context first, before
+        // getting and visiting the nextContext. Because getting the next context is a stateful
+        // operation, as it could update (push/pop) the current context stack.
+
+        // Remove current token. That means continue with the NEXT token, with the CURRENT context
+        Result deletionResult = seekMatchInSubTree(lookahead + 1, currentDepth, currentContext);
+
+        // Insert the missing token. That means continue the CURRENT token, with the NEXT Context
+        ParserRuleContext nextContext = getNextRule(currentContext, lookahead);
+        Result insertionResult = seekMatchInSubTree(lookahead, currentDepth, nextContext);
+
+        Result fixedPathResult;
+        Solution action;
+        if (insertionResult.matches == 0 && deletionResult.matches == 0) {
+            fixedPathResult = insertionResult;
+        } else if (insertionResult.matches >= deletionResult.matches) {
+            action = new Solution(Action.INSERT, currentContext, getParentContext(), currentContext.toString());
+            insertionResult.fixes.push(action);
+            fixedPathResult = insertionResult;
+        } else {
+            action = new Solution(Action.REMOVE, currentContext, getParentContext(),
+                    this.tokenReader.peek(lookahead).text);
+            deletionResult.fixes.push(action);
+            fixedPathResult = deletionResult;
+        }
+        return fixedPathResult;
+    }
+
+    private ParserRuleContext getNextRule(ParserRuleContext currentContext, int nextLookahead) {
+        // If this is a production then push the context to the stack.
+        // We can do this within the below switch-case. But doing it separately
+        // for the sake of maintainability.
+        switch (currentContext) {
+            case COMP_UNIT:
+            case FUNC_DEFINITION:
+            case FUNC_SIGNATURE:
+            case RETURN_TYPE_DESCRIPTOR:
+            case EXTERNAL_FUNC_BODY:
+            case FUNC_BODY_BLOCK:
+            case STATEMENT:
+                pushContext(currentContext);
+            default:
+                break;
+        }
+
+        ParserRuleContext parentCtx;
+        switch (currentContext) {
+            case COMP_UNIT:
+                return ParserRuleContext.TOP_LEVEL_NODE;
+            case FUNC_DEFINITION:
+                return ParserRuleContext.FUNCTION_KEYWORD;
+            case FUNC_SIGNATURE:
+                return ParserRuleContext.OPEN_PARANTHESIS;
+            case RETURN_TYPE_DESCRIPTOR:
+                return ParserRuleContext.RETURNS_KEYWORD;
+            case EXTERNAL_FUNC_BODY:
+                return ParserRuleContext.EXTERNAL_KEYWORD;
+            case FUNC_BODY_BLOCK:
+                return ParserRuleContext.OPEN_BRACE;
+            case STATEMENT:
+                return ParserRuleContext.TYPE_DESCRIPTOR;
+            case ASSIGN_OP:
+                parentCtx = getParentContext();
+                if (parentCtx == ParserRuleContext.EXTERNAL_FUNC_BODY) {
+                    return ParserRuleContext.EXTERNAL_KEYWORD;
+                } else if (parentCtx == ParserRuleContext.STATEMENT) {
+                    return ParserRuleContext.EXPRESSION;
+                } else {
+                    throw new IllegalStateException();
+                }
+            case CLOSE_BRACE:
+                parentCtx = getParentContext();
+                if (parentCtx == ParserRuleContext.FUNC_BODY_BLOCK) {
+                    popContext(); // end func body block
+                    return ParserRuleContext.TOP_LEVEL_NODE;
+                } else {
+                    throw new IllegalStateException();
+                }
+            case CLOSE_PARANTHESIS:
+                popContext(); // end func signature
+                return ParserRuleContext.FUNC_BODY;
+            case EXPRESSION:
+                return ParserRuleContext.SEMICOLON;
+            case EXTERNAL_KEYWORD:
+                return ParserRuleContext.SEMICOLON;
+            case FUNCTION_KEYWORD:
+                return ParserRuleContext.FUNC_NAME;
+            case FUNC_NAME:
+                return ParserRuleContext.FUNC_SIGNATURE;
+            case OPEN_BRACE:
+                if (isEndOfBlock(this.tokenReader.peek(nextLookahead))) {
+                    return ParserRuleContext.CLOSE_BRACE;
+                }
+                return ParserRuleContext.STATEMENT;
+            case OPEN_PARANTHESIS:
+                return ParserRuleContext.PARAM_LIST;
+            case PARAM_LIST:
+                return ParserRuleContext.PARAMETER;
+            case RETURNS_KEYWORD:
+                if (this.tokenReader.peek(nextLookahead).kind != TokenKind.RETURNS) {
+                    // If there are no matches in the optional rule, then continue from the
+                    // next immediate rule without changing the state
+                    return ParserRuleContext.FUNC_BODY;
+                }
+                return ParserRuleContext.TYPE_DESCRIPTOR;
+            case SEMICOLON:
+                parentCtx = getParentContext();
+                if (parentCtx == ParserRuleContext.EXTERNAL_FUNC_BODY) {
+                    popContext(); // end external func
+                    return ParserRuleContext.TOP_LEVEL_NODE;
+                } else if (parentCtx == ParserRuleContext.STATEMENT) {
+                    popContext(); // end func statement
+                    if (isEndOfBlock(this.tokenReader.peek(nextLookahead))) {
+                        return ParserRuleContext.CLOSE_BRACE;
+                    }
+                    return ParserRuleContext.STATEMENT;
+                } else {
+                    throw new IllegalStateException();
+                }
+            case TYPE_DESCRIPTOR:
+                parentCtx = getParentContext();
+                if (parentCtx == ParserRuleContext.STATEMENT) {
+                    return ParserRuleContext.VARIABLE_NAME;
+                } else if (parentCtx == ParserRuleContext.RETURN_TYPE_DESCRIPTOR) {
+                    return ParserRuleContext.FUNC_BODY;
+                } else {
+                    throw new IllegalStateException();
+                }
+            case VARIABLE_NAME:
+                return ParserRuleContext.ASSIGN_OP;
+            case TOP_LEVEL_NODE:
+                return ParserRuleContext.FUNC_DEFINITION;
+            case FUNC_BODY:
+                return ParserRuleContext.TOP_LEVEL_NODE;
+            case PARAMETER:
+                return ParserRuleContext.CLOSE_PARANTHESIS;
+            case ANNOTATION_ATTACHMENT:
+            default:
+                throw new IllegalStateException();
+        }
+    }
+
+    private boolean hasMatchInExpression(Token nextToken) {
+        switch (nextToken.kind) {
+            case INT_LITERAL:
+            case FLOAT_LITERAL:
+            case HEX_LITERAL:
+            case IDENTIFIER:
+                return true;
+            default:
+                return false;
+        }
     }
 
     private class Result {
@@ -503,13 +514,15 @@ public class BallerinaParserErrorHandlerV4 {
     private class Solution {
 
         private ParserRuleContext ctx;
+        private ParserRuleContext enclosingCtx;
         private Action action;
         private String token;
 
-        public Solution(Action action, ParserRuleContext ctx, String token) {
+        public Solution(Action action, ParserRuleContext ctx, ParserRuleContext enclosingCtx, String token) {
             this.action = action;
             this.ctx = ctx;
             this.token = token;
+            this.enclosingCtx = enclosingCtx;
         }
 
         @Override
