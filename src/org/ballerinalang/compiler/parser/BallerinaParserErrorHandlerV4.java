@@ -18,7 +18,9 @@
 package org.ballerinalang.compiler.parser;
 
 import java.util.ArrayDeque;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.List;
 
 public class BallerinaParserErrorHandlerV4 {
 
@@ -27,6 +29,12 @@ public class BallerinaParserErrorHandlerV4 {
     private final BallerinaParser parser;
 
     private ArrayDeque<ParserRuleContext> ctxStack = new ArrayDeque<>();
+
+    private static final ParserRuleContext[] STATEMENTS =
+            { ParserRuleContext.ASSIGNMENT_STMT, ParserRuleContext.VAR_DEF_STMT };
+
+    private static final ParserRuleContext[] FUNC_BODIES =
+            { ParserRuleContext.FUNC_BODY_BLOCK, ParserRuleContext.EXTERNAL_FUNC_BODY };
 
     /**
      * Limit for the distance to travel, to determine a successful lookahead.
@@ -107,10 +115,6 @@ public class BallerinaParserErrorHandlerV4 {
         }
     }
 
-    /**
-     * @param fix
-     * @param currentCtx
-     */
     private void applyFix(Solution fix, ParserRuleContext currentCtx) {
         if (fix.action == Action.REMOVE) {
             removeInvalidToken();
@@ -206,7 +210,7 @@ public class BallerinaParserErrorHandlerV4 {
         ArrayDeque<Solution> fixes = new ArrayDeque<>();
         int matchingRulesCount = 0;
 
-        while (currentDepth <= LOOKAHEAD_LIMIT) {
+        while (currentDepth < LOOKAHEAD_LIMIT) {
             hasMatch = true;
             skipRule = false;
 
@@ -246,29 +250,7 @@ public class BallerinaParserErrorHandlerV4 {
                     hasMatch = nextToken.kind == TokenKind.TYPE;
                     break;
                 case FUNC_BODY:
-                    Result funcBodyBlockResult =
-                            seekMatchInSubTree(lookahead, currentDepth, ParserRuleContext.FUNC_BODY_BLOCK);
-                    Result externFuncResult =
-                            seekMatchInSubTree(lookahead, currentDepth, ParserRuleContext.EXTERNAL_FUNC_BODY);
-
-                    // This means there are no matches for the function body
-                    if (funcBodyBlockResult.matches == 0 && externFuncResult.matches == 0) {
-                        return new Result(fixes, matchingRulesCount);
-                    }
-
-                    if (funcBodyBlockResult.matches >= externFuncResult.matches) { // matches to function body block
-                        matchingRulesCount += funcBodyBlockResult.matches;
-                        for (Solution item : funcBodyBlockResult.fixes) {
-                            fixes.add(item); // add() here instead of push() to maintain the same order
-                        }
-                    } else { // matches to external function
-                        matchingRulesCount += externFuncResult.matches;
-                        for (Solution item : externFuncResult.fixes) {
-                            fixes.add(item); // add() here instead of push() to maintain the same order
-                        }
-                    }
-
-                    return new Result(fixes, matchingRulesCount);
+                    return seekInFuncBodies(lookahead, currentDepth, matchingRulesCount, fixes);
                 case OPEN_BRACE:
                     hasMatch = nextToken.kind == TokenKind.OPEN_BRACE;
                     break;
@@ -298,6 +280,8 @@ public class BallerinaParserErrorHandlerV4 {
 
                 case STATEMENT:
                     if (nextToken.kind == TokenKind.SEMICOLON) {
+                        // Semicolon at the start of a statement is a special case. This is equivalent to an empty
+                        // statement. So assume the fix for this is a REMOVE operation and continue from the next token.
                         Result result = seekMatchInSubTree(lookahead + 1, currentDepth, ParserRuleContext.STATEMENT);
                         fixes.add(
                                 new Solution(Action.REMOVE, currentContext, getParentContext(), nextToken.toString()));
@@ -305,37 +289,14 @@ public class BallerinaParserErrorHandlerV4 {
                         matchingRulesCount += result.matches;
                         return new Result(fixes, matchingRulesCount);
                     } else if (isEndOfBlock(nextToken)) {
+                        // If we reach end of statements, then skip processing statements anymore,
+                        // and move on to the next rule. This is done to avoid getting stuck on
+                        // processing statements forever.
                         skipRule = true;
                         break;
                     }
 
-                    Result stmt1 = seekMatchInSubTree(lookahead, currentDepth, ParserRuleContext.ASSIGNMENT_STMT);
-                    Result stmt2 = seekMatchInSubTree(lookahead, currentDepth, ParserRuleContext.VAR_DEF_STMT);
-
-                    // This means there are no matches for any of the statements
-                    if (stmt1.matches == 0 && stmt2.matches == 0) {
-                        return new Result(fixes, matchingRulesCount);
-                    }
-
-                    Result selection;
-                    if (stmt1.matches == stmt2.matches) {
-                        // during a tie, select the path that requires the lowet amount of fixes.
-                        if (stmt1.fixes.size() <= stmt2.fixes.size()) {
-                            selection = stmt1;
-                        } else {
-                            selection = stmt2;
-                        }
-                    } else if (stmt1.matches > stmt2.matches) { // matches to function body block
-                        selection = stmt1;
-                    } else { // matches to external function
-                        selection = stmt2;
-                    }
-
-                    matchingRulesCount += selection.matches;
-                    for (Solution item : selection.fixes) {
-                        fixes.add(item); // add() here instead of push() to maintain the same order
-                    }
-                    return new Result(fixes, matchingRulesCount);
+                    return seekInStatements(lookahead, currentDepth, matchingRulesCount, fixes);
 
                 // productions
                 case EXPRESSION:
@@ -383,6 +344,72 @@ public class BallerinaParserErrorHandlerV4 {
         return new Result(fixes, matchingRulesCount);
     }
 
+    private Result seekInFuncBodies(int lookahead, int currentDepth, int matchingRulesCount,
+                                    ArrayDeque<Solution> fixes) {
+        return seekInAlternativesPaths(lookahead, currentDepth, matchingRulesCount, fixes, FUNC_BODIES);
+
+    }
+
+    private Result seekInStatements(int lookahead, int currentDepth, int matchingRulesCount,
+                                    ArrayDeque<Solution> fixes) {
+        return seekInAlternativesPaths(lookahead, currentDepth, matchingRulesCount, fixes, STATEMENTS);
+
+    }
+
+    private Result seekInAlternativesPaths(int lookahead, int currentDepth, int currentMatches,
+                                           ArrayDeque<Solution> fixes, ParserRuleContext[] alternativeRules) {
+
+        @SuppressWarnings("unchecked")
+        List<Result>[] results = new List[LOOKAHEAD_LIMIT];
+        int bestMatchIndex = 0;
+
+        // Visit all the alternative rules and get their results. Arrange them in way
+        // such that results with the same number of matches are together. This is
+        // done so that we can easily pick the best, without iterating through them.
+        for (ParserRuleContext rule : alternativeRules) {
+            Result result = seekMatchInSubTree(lookahead, currentDepth, rule);
+            List<Result> similarResutls = results[result.matches];
+            if (similarResutls == null) {
+                similarResutls = new ArrayList<>(LOOKAHEAD_LIMIT);
+                results[result.matches] = similarResutls;
+                if (bestMatchIndex < result.matches) {
+                    bestMatchIndex = result.matches;
+                }
+            }
+            similarResutls.add(result);
+        }
+
+        // This means there are no matches for any of the statements
+        if (bestMatchIndex == 0) {
+            return new Result(fixes, currentMatches);
+        }
+
+        // If there is only one 'best' match,
+        List<Result> bestMatches = results[bestMatchIndex];
+        Result bestMatch = bestMatches.get(0);
+        if (bestMatches.size() == 1) {
+            return getFinalResult(currentMatches, fixes, bestMatch);
+        }
+
+        // If there are more than one 'best' match, then we need to do a tie-break.
+        // For that, pick the path with the lowest number of fixes.
+        // If it again results in more than one match, then return the based on the
+        // precedence (order of occurrence).
+        for (Result match : bestMatches) {
+            if (match.fixes.size() < bestMatch.fixes.size()) {
+                bestMatch = match;
+            }
+        }
+
+        return getFinalResult(currentMatches, fixes, bestMatch);
+    }
+
+    private Result getFinalResult(int currentMatches, ArrayDeque<Solution> fixes, Result bestMatch) {
+        currentMatches += bestMatch.matches;
+        fixes.addAll(bestMatch.fixes);
+        return new Result(fixes, currentMatches);
+    }
+
     private Result fixAndContinue(int lookahead, int currentDepth, ParserRuleContext currentContext) {
         // NOTE: Below order is important. We have to visit the current context first, before
         // getting and visiting the nextContext. Because getting the next context is a stateful
@@ -397,6 +424,9 @@ public class BallerinaParserErrorHandlerV4 {
 
         Result fixedPathResult;
         Solution action;
+
+        // TODO: Add tie-break. i.e: "insertionResult.matches == deletionResult.matches" scenario
+
         if (insertionResult.matches == 0 && deletionResult.matches == 0) {
             fixedPathResult = insertionResult;
         } else if (insertionResult.matches >= deletionResult.matches) {
@@ -414,8 +444,8 @@ public class BallerinaParserErrorHandlerV4 {
 
     private ParserRuleContext getNextRule(ParserRuleContext currentContext, int nextLookahead) {
         // If this is a production, then push the context to the stack.
-        // We can do this within the below switch-case. But doing it separately
-        // for the sake of maintainability.
+        // We can do this within the same switch-case that follows afters this one.
+        // But doing it separately for the sake of maintainability.
         switch (currentContext) {
             case COMP_UNIT:
             case FUNC_DEFINITION:
