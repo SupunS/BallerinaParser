@@ -17,6 +17,8 @@
  */
 package org.ballerinalang.compiler.parser;
 
+import org.ballerinalang.compiler.parser.BallerinaParserErrorHandlerV4.Action;
+
 import java.io.InputStream;
 
 public class BallerinaParser {
@@ -114,6 +116,9 @@ public class BallerinaParser {
             case ASSIGNMENT_STMT:
                 parseAssignmentStmt();
                 break;
+            case BINARY_EXPR_RHS:
+                parseBinaryExprRhs();
+                break;
             case TOP_LEVEL_NODE:
             default:
                 throw new IllegalStateException("Cannot re-parse rule:" + context);
@@ -133,8 +138,8 @@ public class BallerinaParser {
         return this.tokenReader.consumeNonTrivia();
     }
 
-    private void recover(Token token, ParserRuleContext currentContext) {
-        this.errorHandler.recover(token, currentContext);
+    private Action recover(Token token, ParserRuleContext currentContext) {
+        return this.errorHandler.recover(token, currentContext);
     }
 
     private void switchContext(ParserRuleContext context) {
@@ -360,7 +365,6 @@ public class BallerinaParser {
      */
     private void parseFunctionBodyBlock() {
         switchContext(ParserRuleContext.FUNC_BODY_BLOCK);
-
         parseLeftBrace();
         parseStatements(); // TODO: allow workers
         parseRightBrace();
@@ -479,7 +483,7 @@ public class BallerinaParser {
     private void parseAssignOp() {
         Token token = peek();
         if (token.kind == TokenKind.ASSIGN) {
-            this.listner.exitSyntaxNode(consume()); // =
+            this.listner.exitOperator(consume()); // =
         } else {
             recover(token, ParserRuleContext.ASSIGN_OP);
         }
@@ -544,7 +548,44 @@ public class BallerinaParser {
      */
 
     private void parseExpression() {
-        switchContext(ParserRuleContext.EXPRESSION);
+        // switchContext(ParserRuleContext.EXPRESSION);
+        parseExpressionStart();
+        parseBinaryExprRhs();
+        // revertContext();
+    }
+
+    /**
+     * 
+     */
+    private void parseBinaryExprRhs() {
+        Token token = peek();
+        if (isEndOfExpression(token)) {
+            return;
+        }
+
+        boolean isBinaryOp = isBinaryOperator(token);
+
+        boolean parseExpr;
+        if (isBinaryOp) {
+            this.listner.exitOperator(consume()); // operator
+            parseExpr = true;
+        } else {
+            Action action = recover(token, ParserRuleContext.BINARY_EXPR_RHS);
+            
+            // If the current rule was recovered by deleting a token,
+            // then this entire rule is already parsed while recovering.
+            // so we done need to parse the remaining of this rule again.
+            // Proceed only if the recovery action was an insertion.
+            parseExpr = action == Action.INSERT;
+        }
+
+        if (parseExpr) {
+            parseExpression();
+            this.listner.endBinaryExpression();
+        }
+    }
+
+    private void parseExpressionStart() {
         Token token = peek();
         switch (token.kind) {
             case FLOAT_LITERAL:
@@ -559,8 +600,40 @@ public class BallerinaParser {
                 recover(token, ParserRuleContext.EXPRESSION);
                 break;
         }
+    }
 
-        revertContext();
+    private boolean isBinaryOperator(Token token) {
+        switch (token.kind) {
+            case ADD:
+            case SUB:
+            case DIV:
+            case MUL:
+            case GT:
+            case LT:
+            case EQUAL_GT:
+            case EQUAL:
+            case REF_EQUAL:
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    /**
+     * @return
+     */
+    private boolean isEndOfExpression(Token token) {
+        switch (token.kind) {
+            case CLOSE_BRACE:
+            case PUBLIC:
+            case FUNCTION:
+            case EOF:
+            case SEMICOLON:
+            case COMMA:
+                return true;
+            default:
+                return false;
+        }
     }
 
     private void parseLiteral() {

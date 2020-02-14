@@ -25,17 +25,30 @@ import org.ballerinalang.compiler.parser.TokenKind;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Paths;
 
 public class TestParser {
 
     public static void main(String[] args) throws IOException {
         String path = "/Users/supun/eclipse-workspace-2019-09/BallerinaParser/src/test/test1.bal";
-        // String path = "/Users/supun/eclipse-workspace-2019-09/BallerinaParser/src/test/test2.bal";
+//         String path = "/Users/supun/eclipse-workspace-2019-09/BallerinaParser/src/test/test2.bal";
 
-        FileInputStream is = new FileInputStream(path);
-        testParser(is);
+//        FileInputStream is = new FileInputStream(path);
+        String content = new String(Files.readAllBytes(Paths.get(path)), StandardCharsets.UTF_8);
+//        while (true) {
+            testParser(content);
+//        }
     }
 
+    private static void testParser(String content) throws FileNotFoundException {
+        BallerinaParser parser = new BallerinaParser(content);
+        long sTime = System.currentTimeMillis();
+        parser.parse();
+        System.out.println("Time: " + (System.currentTimeMillis() - sTime) / 1000.0);
+    }
+    
     private static void testParser(FileInputStream is) throws FileNotFoundException {
         BallerinaLexer lexer = new BallerinaLexer(is);
         BallerinaParser parser = new BallerinaParser(lexer);

@@ -19,6 +19,7 @@ package org.ballerinalang.compiler.parser;
 
 import org.ballerinalang.compiler.parser.tree.ASTNode;
 import org.ballerinalang.compiler.parser.tree.AssignmentStmtNode;
+import org.ballerinalang.compiler.parser.tree.BinaryExpressionNode;
 import org.ballerinalang.compiler.parser.tree.EmptyNode;
 import org.ballerinalang.compiler.parser.tree.InvalidNode;
 import org.ballerinalang.compiler.parser.tree.LiteralNode;
@@ -28,6 +29,7 @@ import org.ballerinalang.compiler.parser.tree.FunctionNode;
 import org.ballerinalang.compiler.parser.tree.IdentifierNode;
 import org.ballerinalang.compiler.parser.tree.MissingNode;
 import org.ballerinalang.compiler.parser.tree.ModifierNode;
+import org.ballerinalang.compiler.parser.tree.OperatorNode;
 import org.ballerinalang.compiler.parser.tree.ParametersNode;
 import org.ballerinalang.compiler.parser.tree.ReturnTypeDescNode;
 import org.ballerinalang.compiler.parser.tree.SyntaxNode;
@@ -194,5 +196,20 @@ public class BallerinaParserListener {
         assignmentStmt.assign = this.nodesStack.pop();
         assignmentStmt.varRef = this.nodesStack.pop();
         this.statements.add(assignmentStmt);
+    }
+
+    public void exitOperator(Token content) {
+        this.nodesStack.push(new OperatorNode(content));
+    }
+
+    /**
+     * 
+     */
+    public void endBinaryExpression() {
+        BinaryExpressionNode binaryExpr = new BinaryExpressionNode();
+        binaryExpr.rhsExpr = this.nodesStack.pop();
+        binaryExpr.operator = this.nodesStack.pop();
+        binaryExpr.lhsExpr = this.nodesStack.pop();
+        this.nodesStack.push(binaryExpr);
     }
 }

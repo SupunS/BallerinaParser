@@ -20,7 +20,6 @@ package org.ballerinalang.compiler.parser;
 public enum ParserRuleContext {
 
     // productions
-
     COMP_UNIT("comp-unit"),
     TOP_LEVEL_NODE("top-level-node"),
     FUNC_DEFINITION("func-definition"),
@@ -32,7 +31,6 @@ public enum ParserRuleContext {
     FUNC_SIGNATURE("func-signature"),
     EXTERNAL_FUNC_BODY("external-func-body"),
     FUNC_BODY_BLOCK("func-body-block"),
-    EXPRESSION("expression"),
     RETURN_TYPE_DESCRIPTOR("return-type-desc"),
     ASSIGNMENT_STMT("assignment-stmt"),
     VAR_DEF_STMT("var-def-stmt"),
@@ -49,7 +47,16 @@ public enum ParserRuleContext {
     ASSIGN_OP("="),
     SEMICOLON(";"),
     EXTERNAL_KEYWORD("external"), 
-    VARIABLE_NAME("variable");
+    VARIABLE_NAME("variable"),
+    BINARY_OPERATOR("binary-operator"),
+
+    // expressions
+    EXPRESSION("expression"),
+    BINARY_EXPR_RHS("expression-rhs"),
+    //LITERAL_EXPR("literal"),
+    // CAST_EXPR("cast-expr")
+    // BINARY_EXPR("binary-expr"),
+    ;
 
     private String value;
 

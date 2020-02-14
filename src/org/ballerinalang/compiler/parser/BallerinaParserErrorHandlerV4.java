@@ -30,11 +30,11 @@ public class BallerinaParserErrorHandlerV4 {
 
     private ArrayDeque<ParserRuleContext> ctxStack = new ArrayDeque<>();
 
-    private static final ParserRuleContext[] STATEMENTS =
-            { ParserRuleContext.ASSIGNMENT_STMT, ParserRuleContext.VAR_DEF_STMT };
-
     private static final ParserRuleContext[] FUNC_BODIES =
             { ParserRuleContext.FUNC_BODY_BLOCK, ParserRuleContext.EXTERNAL_FUNC_BODY };
+
+    private static final ParserRuleContext[] STATEMENTS =
+            { ParserRuleContext.ASSIGNMENT_STMT, ParserRuleContext.VAR_DEF_STMT };
 
     /**
      * Limit for the distance to travel, to determine a successful lookahead.
@@ -82,7 +82,7 @@ public class BallerinaParserErrorHandlerV4 {
      * -------------- Error recovering --------------
      */
 
-    public void recover(Token nextToken, ParserRuleContext currentContext) {
+    public Action recover(Token nextToken, ParserRuleContext currentContext) {
         // Assumption: always comes here after a peek()
 
         // Key key = new Key(nextToken, currentContext);
@@ -95,7 +95,7 @@ public class BallerinaParserErrorHandlerV4 {
         if (nextToken.kind == TokenKind.EOF) {
             reportMissingTokenError("missing " + currentContext);
             this.listner.addMissingNode(currentContext.toString());
-            return;
+            return Action.INSERT;
         }
 
         Result bestMatch = seekMatch(currentContext);
@@ -108,11 +108,14 @@ public class BallerinaParserErrorHandlerV4 {
 
             Solution fix = bestMatch.fixes.pop();
             applyFix(fix, currentContext);
+            return fix.action;
         } else {
             // fail safe
             // this means we can't find a path to recover
             removeInvalidToken();
+            return Action.REMOVE;
         }
+
     }
 
     private void applyFix(Solution fix, ParserRuleContext currentCtx) {
@@ -204,6 +207,26 @@ public class BallerinaParserErrorHandlerV4 {
         }
     }
 
+    /**
+     * TODO: This is a duplicate method. Same as {@link BallerinaParser#isEndOfBlock}
+     * 
+     * @param token
+     * @return
+     */
+    private boolean isEndOfExpression(Token token) {
+        switch (token.kind) {
+            case CLOSE_BRACE:
+            case PUBLIC:
+            case FUNCTION:
+            case EOF:
+            case SEMICOLON:
+            case COMMA:
+                return true;
+            default:
+                return false;
+        }
+    }
+
     private Result seekMatch(int lookahead, int currentDepth, ParserRuleContext currentContext) {
         boolean hasMatch;
         boolean skipRule;
@@ -277,31 +300,24 @@ public class BallerinaParserErrorHandlerV4 {
                 case VARIABLE_NAME:
                     hasMatch = nextToken.kind == TokenKind.IDENTIFIER;
                     break;
-
                 case STATEMENT:
-                    if (nextToken.kind == TokenKind.SEMICOLON) {
-                        // Semicolon at the start of a statement is a special case. This is equivalent to an empty
-                        // statement. So assume the fix for this is a REMOVE operation and continue from the next token.
-                        Result result = seekMatchInSubTree(lookahead + 1, currentDepth, ParserRuleContext.STATEMENT);
-                        fixes.add(
-                                new Solution(Action.REMOVE, currentContext, getParentContext(), nextToken.toString()));
-                        fixes.addAll(result.fixes);
-                        matchingRulesCount += result.matches;
-                        return new Result(fixes, matchingRulesCount);
-                    } else if (isEndOfBlock(nextToken)) {
+                    if (isEndOfBlock(nextToken)) {
                         // If we reach end of statements, then skip processing statements anymore,
                         // and move on to the next rule. This is done to avoid getting stuck on
                         // processing statements forever.
                         skipRule = true;
                         break;
                     }
-
-                    return seekInStatements(lookahead, currentDepth, matchingRulesCount, fixes);
+                    return seekInStatements(currentContext, nextToken, lookahead, currentDepth, matchingRulesCount,
+                            fixes);
+                case BINARY_OPERATOR:
+                    hasMatch = isBinaryOperator(nextToken);
+                    break;
+                case EXPRESSION:
+                    return seekInExpression(currentContext, lookahead, currentDepth, matchingRulesCount, fixes);
 
                 // productions
-                case EXPRESSION:
-                    hasMatch = hasMatchInExpression(nextToken);
-                    break;
+                case BINARY_EXPR_RHS:
                 case COMP_UNIT:
                 case FUNC_DEFINITION:
                 case FUNC_SIGNATURE:
@@ -319,19 +335,12 @@ public class BallerinaParserErrorHandlerV4 {
 
             if (!hasMatch) {
                 Result fixedPathResult = fixAndContinue(lookahead, currentDepth + 1, currentContext);
-                for (Solution item : fixedPathResult.fixes) {
-                    fixes.add(item); // add() here instead of push() to maintain the same order
-                }
-
-                matchingRulesCount += fixedPathResult.matches;
-
                 // Do not consider the current rule as match, since we had to fix it.
                 // i.e: do not increment the match count by 1;
-                return new Result(fixes, matchingRulesCount);
+                return getFinalResult(matchingRulesCount, fixes, fixedPathResult);
             }
 
             currentContext = getNextRule(currentContext, lookahead + 1);
-
             if (!skipRule) {
                 // Try the next token with the next rule
                 currentDepth++;
@@ -344,23 +353,65 @@ public class BallerinaParserErrorHandlerV4 {
         return new Result(fixes, matchingRulesCount);
     }
 
-    private Result seekInFuncBodies(int lookahead, int currentDepth, int matchingRulesCount,
-                                    ArrayDeque<Solution> fixes) {
-        return seekInAlternativesPaths(lookahead, currentDepth, matchingRulesCount, fixes, FUNC_BODIES);
-
+    private Result seekInFuncBodies(int lookahead, int currentDepth, int currentMatches, ArrayDeque<Solution> fixes) {
+        return seekInAlternativesPaths(lookahead, currentDepth, currentMatches, fixes, FUNC_BODIES);
     }
 
-    private Result seekInStatements(int lookahead, int currentDepth, int matchingRulesCount,
-                                    ArrayDeque<Solution> fixes) {
-        return seekInAlternativesPaths(lookahead, currentDepth, matchingRulesCount, fixes, STATEMENTS);
+    private Result seekInStatements(ParserRuleContext currentContext, Token nextToken, int lookahead, int currentDepth,
+                                    int currentMatches, ArrayDeque<Solution> fixes) {
+        if (nextToken.kind == TokenKind.SEMICOLON) {
+            // Semicolon at the start of a statement is a special case. This is equivalent to an empty
+            // statement. So assume the fix for this is a REMOVE operation and continue from the next token.
+            Result result = seekMatchInSubTree(lookahead + 1, currentDepth, ParserRuleContext.STATEMENT);
+            fixes.add(new Solution(Action.REMOVE, currentContext, getParentContext(), nextToken.toString()));
+            fixes.addAll(result.fixes);
+            currentMatches += result.matches;
+            return new Result(fixes, currentMatches);
+        }
 
+        return seekInAlternativesPaths(lookahead, currentDepth, currentMatches, fixes, STATEMENTS);
+    }
+
+    private Result seekInExpression(ParserRuleContext currentContext, int lookahead, int currentDepth,
+                                    int matchingRulesCount, ArrayDeque<Solution> fixes) {
+        Token nextToken = this.tokenReader.peek(lookahead);
+        boolean hasMatch = false;
+        switch (nextToken.kind) {
+            case INT_LITERAL:
+            case HEX_LITERAL:
+            case FLOAT_LITERAL:
+            case IDENTIFIER:
+                hasMatch = true;
+                break;
+            default:
+                break;
+        }
+
+        if (!hasMatch) {
+            Result fixedPathResult = fixAndContinue(lookahead, currentDepth + 1, currentContext);
+            return getFinalResult(matchingRulesCount, fixes, fixedPathResult);
+        } else {
+            lookahead++;
+            matchingRulesCount++;
+            nextToken = this.tokenReader.peek(lookahead);
+            ParserRuleContext nextContext;
+            if (isEndOfExpression(nextToken)) {
+                // Here we assume the end of an expression is always a semicolon
+                // TODO: add other types of expression-end
+                nextContext = ParserRuleContext.SEMICOLON;
+            } else {
+                nextContext = ParserRuleContext.BINARY_EXPR_RHS;
+            }
+            Result result = seekMatch(lookahead, currentDepth, nextContext);
+            return getFinalResult(matchingRulesCount, fixes, result);
+        }
     }
 
     private Result seekInAlternativesPaths(int lookahead, int currentDepth, int currentMatches,
                                            ArrayDeque<Solution> fixes, ParserRuleContext[] alternativeRules) {
 
         @SuppressWarnings("unchecked")
-        List<Result>[] results = new List[LOOKAHEAD_LIMIT];
+        List<Result>[] results = new List[LOOKAHEAD_LIMIT + 1];
         int bestMatchIndex = 0;
 
         // Visit all the alternative rules and get their results. Arrange them in way
@@ -456,6 +507,7 @@ public class BallerinaParserErrorHandlerV4 {
             case STATEMENT:
             case VAR_DEF_STMT:
             case ASSIGNMENT_STMT:
+                // case EXPRESSION:
                 pushContext(currentContext);
             default:
                 break;
@@ -476,7 +528,8 @@ public class BallerinaParserErrorHandlerV4 {
             case FUNC_BODY_BLOCK:
                 return ParserRuleContext.OPEN_BRACE;
             case STATEMENT:
-                if (isEndOfBlock(this.tokenReader.peek(nextLookahead))) {
+                Token nextToken = this.tokenReader.peek(nextLookahead);
+                if (isEndOfBlock(nextToken)) {
                     popContext(); // end statement
                     return ParserRuleContext.CLOSE_BRACE;
                 } else {
@@ -503,7 +556,15 @@ public class BallerinaParserErrorHandlerV4 {
                 popContext(); // end func signature
                 return ParserRuleContext.FUNC_BODY;
             case EXPRESSION:
-                return ParserRuleContext.SEMICOLON;
+                nextToken = this.tokenReader.peek(nextLookahead);
+                if (isEndOfExpression(nextToken)) {
+                    // Here we assume the end of an expression is always a semicolon
+                    // TODO: add other types of expression-end
+                    return ParserRuleContext.SEMICOLON;
+                } else {
+                    return ParserRuleContext.BINARY_EXPR_RHS;
+                }
+
             case EXTERNAL_KEYWORD:
                 return ParserRuleContext.SEMICOLON;
             case FUNCTION_KEYWORD:
@@ -511,10 +572,18 @@ public class BallerinaParserErrorHandlerV4 {
             case FUNC_NAME:
                 return ParserRuleContext.FUNC_SIGNATURE;
             case OPEN_BRACE:
-                if (isEndOfBlock(this.tokenReader.peek(nextLookahead))) {
-                    return ParserRuleContext.CLOSE_BRACE;
-                }
-                return ParserRuleContext.STATEMENT;
+                // If an error occurs in the function definition signature, then only search
+                // within the function signature. Do not search within the function body.
+                // This is done to avoid the parser misinterpreting tokens in the signature
+                // as part of the body, and vice-versa.
+                return ParserRuleContext.CLOSE_BRACE;
+
+            // TODO:
+            // if (isEndOfBlock(this.tokenReader.peek(nextLookahead))) {
+            // return ParserRuleContext.CLOSE_BRACE;
+            // }
+
+            // return ParserRuleContext.STATEMENT;
             case OPEN_PARANTHESIS:
                 return ParserRuleContext.PARAM_LIST;
             case PARAM_LIST:
@@ -532,8 +601,8 @@ public class BallerinaParserErrorHandlerV4 {
                     popContext(); // end external func
                     return ParserRuleContext.TOP_LEVEL_NODE;
                 } else if (isExpression(parentCtx)) {
-                    popContext(); // end expression
-                    // A semicolon after an expression also means its an end of a statement, Hence pop the ctx again.
+                    // popContext(); // end expression
+                    // A semicolon after an expression also means its an end of a statement, Hence pop the ctx.
                     popContext(); // end statement
                     if (isEndOfBlock(this.tokenReader.peek(nextLookahead))) {
                         return ParserRuleContext.CLOSE_BRACE;
@@ -569,6 +638,10 @@ public class BallerinaParserErrorHandlerV4 {
                 return ParserRuleContext.VARIABLE_NAME;
             case VAR_DEF_STMT:
                 return ParserRuleContext.TYPE_DESCRIPTOR;
+            case BINARY_EXPR_RHS:
+                return ParserRuleContext.BINARY_OPERATOR;
+            case BINARY_OPERATOR:
+                return ParserRuleContext.EXPRESSION;
             case ANNOTATION_ATTACHMENT:
             default:
                 throw new IllegalStateException("cannot find the next rule for: " + currentContext);
@@ -584,12 +657,17 @@ public class BallerinaParserErrorHandlerV4 {
         return parentCtx == ParserRuleContext.EXPRESSION;
     }
 
-    private boolean hasMatchInExpression(Token nextToken) {
-        switch (nextToken.kind) {
-            case INT_LITERAL:
-            case FLOAT_LITERAL:
-            case HEX_LITERAL:
-            case IDENTIFIER:
+    private boolean isBinaryOperator(Token token) {
+        switch (token.kind) {
+            case ADD:
+            case SUB:
+            case DIV:
+            case MUL:
+            case GT:
+            case LT:
+            case EQUAL_GT:
+            case EQUAL:
+            case REF_EQUAL:
                 return true;
             default:
                 return false;
@@ -600,8 +678,8 @@ public class BallerinaParserErrorHandlerV4 {
         private int matches;
         private ArrayDeque<Solution> fixes;
 
-        public Result(ArrayDeque<Solution> actionItem, int matches) {
-            this.fixes = actionItem;
+        public Result(ArrayDeque<Solution> fixes, int matches) {
+            this.fixes = fixes;
             this.matches = matches;
         }
 
@@ -665,7 +743,7 @@ public class BallerinaParserErrorHandlerV4 {
         }
     }
 
-    private enum Action {
+    enum Action {
         INSERT, REMOVE;
     }
 }
