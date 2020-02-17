@@ -25,6 +25,7 @@ import org.ballerinalang.compiler.parser.tree.InvalidNode;
 import org.ballerinalang.compiler.parser.tree.LiteralNode;
 import org.ballerinalang.compiler.parser.tree.ExternFuncBodyNode;
 import org.ballerinalang.compiler.parser.tree.BlockNode;
+import org.ballerinalang.compiler.parser.tree.BracedExpressionNode;
 import org.ballerinalang.compiler.parser.tree.FunctionNode;
 import org.ballerinalang.compiler.parser.tree.IdentifierNode;
 import org.ballerinalang.compiler.parser.tree.MissingNode;
@@ -208,5 +209,13 @@ public class BallerinaParserListener {
         binaryExpr.operator = this.nodesStack.pop();
         binaryExpr.lhsExpr = this.nodesStack.pop();
         this.nodesStack.push(binaryExpr);
+    }
+
+    public void endBracedExpression() {
+        BracedExpressionNode bracedExpr = new BracedExpressionNode();
+        bracedExpr.closeParenthesis = this.nodesStack.pop();
+        bracedExpr.expression = this.nodesStack.pop();
+        bracedExpr.openParenthesis = this.nodesStack.pop();
+        this.nodesStack.push(bracedExpr);
     }
 }

@@ -17,18 +17,18 @@
  */
 package org.ballerinalang.compiler.parser.tree;
 
-public class BinaryExpressionNode extends ASTNode {
+public class BracedExpressionNode extends ASTNode {
 
-    public ASTNode lhsExpr;
-    public ASTNode operator;
-    public ASTNode rhsExpr;
+    public ASTNode openParenthesis;
+    public ASTNode expression;
+    public ASTNode closeParenthesis;
 
-    public BinaryExpressionNode() {
+    public BracedExpressionNode() {
         this.kind = NodeKind.VAR_DEF;
     }
 
     @Override
     public String toString() {
-        return this.lhsExpr + " " + this.operator + " " + this.rhsExpr;
+        return this.openParenthesis + " " + this.expression + " " + this.closeParenthesis;
     }
 }

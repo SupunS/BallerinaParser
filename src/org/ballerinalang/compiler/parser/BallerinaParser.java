@@ -71,7 +71,7 @@ public class BallerinaParser {
                 parseFunctionSignature();
                 break;
             case OPEN_PARANTHESIS:
-                parseLeftParanthesis();
+                parseOpenParanthesis();
                 break;
             case PARAMETER:
                 // TODO
@@ -99,7 +99,7 @@ public class BallerinaParser {
                 parseStatementEnd();
                 break;
             case CLOSE_PARANTHESIS:
-                parseFunctionSignatureEnd();
+                parseCloseParanthesis();
                 break;
             case VARIABLE_NAME:
                 parseVariableName();
@@ -222,9 +222,9 @@ public class BallerinaParser {
      */
     private void parseFunctionSignature() {
         switchContext(ParserRuleContext.FUNC_SIGNATURE);
-        parseLeftParanthesis();
+        parseOpenParanthesis();
         parseParamList();
-        parseFunctionSignatureEnd();
+        parseCloseParanthesis();
         parseReturnTypeDescriptor();
         this.listner.exitFunctionSignature();
         revertContext();
@@ -233,7 +233,7 @@ public class BallerinaParser {
     /**
      * 
      */
-    private void parseFunctionSignatureEnd() {
+    private void parseCloseParanthesis() {
         Token token = peek();
         if (token.kind == TokenKind.CLOSE_PARANTHESIS) {
             this.listner.exitSyntaxNode(consume()); // )
@@ -245,7 +245,7 @@ public class BallerinaParser {
     /**
      * 
      */
-    private void parseLeftParanthesis() {
+    private void parseOpenParanthesis() {
         Token token = peek();
         if (token.kind == TokenKind.OPEN_PARANTHESIS) {
             this.listner.exitSyntaxNode(consume()); // (
@@ -465,9 +465,6 @@ public class BallerinaParser {
      * Operators
      */
 
-    /**
-     * 
-     */
     private void parseAssignOp() {
         Token token = peek();
         if (token.kind == TokenKind.ASSIGN) {
@@ -477,8 +474,8 @@ public class BallerinaParser {
         }
     }
 
-    private boolean isBinaryOperator(Token token) {
-        switch (token.kind) {
+    private boolean isBinaryOperator(TokenKind kind) {
+        switch (kind) {
             case ADD:
             case SUB:
             case DIV:
@@ -573,35 +570,6 @@ public class BallerinaParser {
         // revertContext();
     }
 
-    /**
-     * 
-     */
-    private void parseBinaryExprRhs() {
-        Token token = peek();
-        if (isEndOfExpression(token)) {
-            return;
-        }
-
-        boolean parseExpr;
-        if (isBinaryOperator(token)) {
-            this.listner.exitOperator(consume()); // operator
-            parseExpr = true;
-        } else {
-            Action action = recover(token, ParserRuleContext.BINARY_EXPR_RHS);
-
-            // If the current rule was recovered by deleting a token,
-            // then this entire rule is already parsed while recovering.
-            // so we done need to parse the remaining of this rule again.
-            // Proceed only if the recovery action was an insertion.
-            parseExpr = action == Action.INSERT;
-        }
-
-        if (parseExpr) {
-            parseExpression();
-            this.listner.endBinaryExpression();
-        }
-    }
-
     private void parseExpressionStart() {
         Token token = peek();
         switch (token.kind) {
@@ -613,10 +581,63 @@ public class BallerinaParser {
             case IDENTIFIER:
                 parseVariableName();
                 break;
+            case OPEN_PARANTHESIS:
+                parseBracedExpression();
+                break;
             default:
                 recover(token, ParserRuleContext.EXPRESSION);
                 break;
         }
+    }
+
+    private void parseBinaryExprRhs() {
+        Token token = peek();
+        if (isEndOfExpression(token)) {
+            return;
+        }
+
+        TokenKind binaryOpKind;
+        if (isBinaryOperator(token.kind)) {
+            Token binaryOp = consume();
+            this.listner.exitOperator(binaryOp); // operator
+            binaryOpKind = binaryOp.kind;
+        } else {
+            Action action = recover(token, ParserRuleContext.BINARY_EXPR_RHS);
+
+            // If the current rule was recovered by removing a token,
+            // then this entire rule is already parsed while recovering.
+            // so we done need to parse the remaining of this rule again.
+            // Proceed only if the recovery action was an insertion.
+            if (action == Action.REMOVE) {
+                return;
+            }
+
+            // We come here if the operator is missing. Hence default it to '+', and continue.
+            binaryOpKind = TokenKind.ADD;
+        }
+
+        switch (binaryOpKind) {
+            case MUL:
+            case DIV:
+                parseExpressionStart();
+                break;
+            case ADD:
+            case SUB:
+                parseExpression();
+                break;
+            default:
+                throw new UnsupportedOperationException("Unsupported binary operator '" + binaryOpKind + "'");
+        }
+
+        this.listner.endBinaryExpression();
+        parseBinaryExprRhs();
+    }
+
+    private void parseBracedExpression() {
+        parseOpenParanthesis();
+        parseExpression();
+        parseCloseParanthesis();
+        this.listner.endBracedExpression();
     }
 
     private boolean isEndOfExpression(Token token) {
@@ -624,11 +645,11 @@ public class BallerinaParser {
             case CLOSE_BRACE:
             case CLOSE_PARANTHESIS:
             case CLOSE_BRACKET:
+            case SEMICOLON:
+            case COMMA:
             case PUBLIC:
             case FUNCTION:
             case EOF:
-            case SEMICOLON:
-            case COMMA:
                 return true;
             default:
                 return false;

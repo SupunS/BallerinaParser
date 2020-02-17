@@ -75,3 +75,13 @@ public function kkk() {
     x = a / b + # +c + d e * f;
     x = a - b c;
 }
+
+public function lll() {
+    x = a + b * c - d / e;
+    x = (a + b) * (c - d) / e;
+
+    x = (a + b * c;
+    x = a + b * c);
+    x = (a + (b * c);
+}
+
