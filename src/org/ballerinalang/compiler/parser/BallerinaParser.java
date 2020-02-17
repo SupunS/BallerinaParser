@@ -17,19 +17,19 @@
  */
 package org.ballerinalang.compiler.parser;
 
-import org.ballerinalang.compiler.parser.BallerinaParserErrorHandlerV4.Action;
+import org.ballerinalang.compiler.parser.BallerinaParserErrorHandler.Action;
 
 import java.io.InputStream;
 
 public class BallerinaParser {
 
     private final BallerinaParserListener listner = new BallerinaParserListener();
-    private final BallerinaParserErrorHandlerV4 errorHandler;
+    private final BallerinaParserErrorHandler errorHandler;
     private final TokenReader tokenReader;
 
     public BallerinaParser(BallerinaLexer lexer) {
         this.tokenReader = new TokenReader(lexer);
-        this.errorHandler = new BallerinaParserErrorHandlerV4(tokenReader, listner, this);
+        this.errorHandler = new BallerinaParserErrorHandler(tokenReader, listner, this);
     }
 
     public BallerinaParser(InputStream inputStream) {
@@ -138,8 +138,8 @@ public class BallerinaParser {
         return this.tokenReader.consumeNonTrivia();
     }
 
-    private Action recover(Token token, ParserRuleContext currentContext) {
-        return this.errorHandler.recover(token, currentContext);
+    private Action recover(Token token, ParserRuleContext currentCtx) {
+        return this.errorHandler.recover(currentCtx, token);
     }
 
     private void switchContext(ParserRuleContext context) {
@@ -373,18 +373,6 @@ public class BallerinaParser {
     }
 
     /**
-     * 
-     */
-    private void parseStatements() {
-        // TODO: parse statements/worker declrs
-        Token token = peek();
-        while (!isEndOfBlock(token)) {
-            parseStatement();
-            token = peek();
-        }
-    }
-
-    /**
      * @param token
      * @return
      */
@@ -489,9 +477,38 @@ public class BallerinaParser {
         }
     }
 
+    private boolean isBinaryOperator(Token token) {
+        switch (token.kind) {
+            case ADD:
+            case SUB:
+            case DIV:
+            case MUL:
+            case GT:
+            case LT:
+            case EQUAL_GT:
+            case EQUAL:
+            case REF_EQUAL:
+                return true;
+            default:
+                return false;
+        }
+    }
+
     /*
      * Statements
      */
+
+    /**
+     * 
+     */
+    private void parseStatements() {
+        // TODO: parse statements/worker declrs
+        Token token = peek();
+        while (!isEndOfBlock(token)) {
+            parseStatement();
+            token = peek();
+        }
+    }
 
     private void parseStatement() {
         Token token = peek();
@@ -504,6 +521,8 @@ public class BallerinaParser {
                 parseAssignmentStmt();
                 break;
             default:
+                // If the next token in the token stream does not match to any of the statements and
+                // if it is not the end of statement, then try to fix it and continue.
                 if (!isEndOfBlock(token)) {
                     recover(token, ParserRuleContext.STATEMENT);
                 }
@@ -563,15 +582,13 @@ public class BallerinaParser {
             return;
         }
 
-        boolean isBinaryOp = isBinaryOperator(token);
-
         boolean parseExpr;
-        if (isBinaryOp) {
+        if (isBinaryOperator(token)) {
             this.listner.exitOperator(consume()); // operator
             parseExpr = true;
         } else {
             Action action = recover(token, ParserRuleContext.BINARY_EXPR_RHS);
-            
+
             // If the current rule was recovered by deleting a token,
             // then this entire rule is already parsed while recovering.
             // so we done need to parse the remaining of this rule again.
@@ -602,29 +619,11 @@ public class BallerinaParser {
         }
     }
 
-    private boolean isBinaryOperator(Token token) {
-        switch (token.kind) {
-            case ADD:
-            case SUB:
-            case DIV:
-            case MUL:
-            case GT:
-            case LT:
-            case EQUAL_GT:
-            case EQUAL:
-            case REF_EQUAL:
-                return true;
-            default:
-                return false;
-        }
-    }
-
-    /**
-     * @return
-     */
     private boolean isEndOfExpression(Token token) {
         switch (token.kind) {
             case CLOSE_BRACE:
+            case CLOSE_PARANTHESIS:
+            case CLOSE_BRACKET:
             case PUBLIC:
             case FUNCTION:
             case EOF:

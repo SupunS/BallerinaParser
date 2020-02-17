@@ -22,10 +22,35 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 
-public class BallerinaParserErrorHandlerV4 {
+/**
+ * <p>
+ * Responsible for recovering from a parser error.
+ * 
+ * When an unexpected token is reached, error handler will try inserting/removing a token from the current head, and see
+ * how far the parser can successfully progress. After fixing the current head and trying to progress, if it encounters
+ * more issues, then it will try to fix those as well. All possible combinations of insertions and deletions will be
+ * tried out for such errors. Once all possible paths are discovered, pick the optimal combination that leads to the
+ * best recovery. Finally, apply the best solution and continue the parsing.
+ * <br/>
+ * e.g.: If the best combination of fixes was <code>[insert, insert, remove, remove]</code>, then apply only the first
+ * fix and continue.
+ * <ul>
+ * <li>If the fix was a ‘remove’ - then consume the token stream once, and continue from the same rule again.
+ * </li>
+ * <li>
+ * If the fix was an ‘insert’ - then insert the missing node, and continue from the next rule, without consuming the
+ * token stream.
+ * </li>
+ * </ul>
+ * </p>
+ * 
+ * @since 1.2.0
+ */
+public class BallerinaParserErrorHandler {
 
     private final TokenReader tokenReader;
     private final BallerinaParserListener listner;
+    private final BallerinaParserErrorListener errorListener;
     private final BallerinaParser parser;
 
     private ArrayDeque<ParserRuleContext> ctxStack = new ArrayDeque<>();
@@ -43,11 +68,12 @@ public class BallerinaParserErrorHandlerV4 {
 
     // private Map<Key, Solution> recoveryCache = new HashMap<>();
 
-    public BallerinaParserErrorHandlerV4(TokenReader tokenReader, BallerinaParserListener listner,
+    public BallerinaParserErrorHandler(TokenReader tokenReader, BallerinaParserListener listner,
             BallerinaParser parser) {
         this.tokenReader = tokenReader;
         this.listner = listner;
         this.parser = parser;
+        this.errorListener = new BallerinaParserErrorListener();
     }
 
     public void pushContext(ParserRuleContext context) {
@@ -63,26 +89,19 @@ public class BallerinaParserErrorHandlerV4 {
     }
 
     /*
-     * -------------- Error reporting --------------
-     */
-
-    public void reportInvalidToken(Token token) {
-        logError(token.line, token.startCol, "invalid token '" + token.text + "'");
-    }
-
-    public void reportMissingTokenError(Token token, String message) {
-        logError(token.line, token.endCol, message);
-    }
-
-    private void logError(int line, int col, String message) {
-        System.out.println("xxx.bal:" + line + ":" + col + ":" + message);
-    }
-
-    /*
      * -------------- Error recovering --------------
      */
 
-    public Action recover(Token nextToken, ParserRuleContext currentContext) {
+    /**
+     * Recover from current context. Returns the action needs to be taken with respect
+     * to the next token, in order to recover. This method will search for the most
+     * optimal action, that will result the parser to proceed the farthest distance.
+     * 
+     * @param nextToken Next token of the input where the error occurred
+     * @param currentCtx Current parser context
+     * @return The action needs to be taken for the next token, in order to recover
+     */
+    public Action recover(ParserRuleContext currentCtx, Token nextToken) {
         // Assumption: always comes here after a peek()
 
         // Key key = new Key(nextToken, currentContext);
@@ -93,12 +112,12 @@ public class BallerinaParserErrorHandlerV4 {
         // }
 
         if (nextToken.kind == TokenKind.EOF) {
-            reportMissingTokenError("missing " + currentContext);
-            this.listner.addMissingNode(currentContext.toString());
+            reportMissingTokenError("missing " + currentCtx);
+            this.listner.addMissingNode(currentCtx.toString());
             return Action.INSERT;
         }
 
-        Result bestMatch = seekMatch(currentContext);
+        Result bestMatch = seekMatch(currentCtx);
         if (bestMatch.matches > 0) {
 
             // Add to cache
@@ -107,7 +126,7 @@ public class BallerinaParserErrorHandlerV4 {
             // }
 
             Solution fix = bestMatch.fixes.pop();
-            applyFix(fix, currentContext);
+            applyFix(currentCtx, fix);
             return fix.action;
         } else {
             // fail safe
@@ -118,7 +137,27 @@ public class BallerinaParserErrorHandlerV4 {
 
     }
 
-    private void applyFix(Solution fix, ParserRuleContext currentCtx) {
+    /**
+     * Remove the invalid token. This method assumes that the next immediate token
+     * of the token input stream is the culprit.
+     */
+    public void removeInvalidToken() {
+        Token invalidToken = this.tokenReader.consumeNonTrivia();
+        // This means no match is found for the current token.
+        // Then consume it and return an error node
+        this.errorListener.reportInvalidToken(invalidToken);
+
+        // FIXME: add this error node to the tree
+        // this.listner.exitErrorNode(nextToken.text);
+    }
+
+    /**
+     * Apply the fix to the current context.
+     * 
+     * @param currentCtx Current context
+     * @param fix Fix to apply
+     */
+    private void applyFix(ParserRuleContext currentCtx, Solution fix) {
         if (fix.action == Action.REMOVE) {
             removeInvalidToken();
             this.parser.parse(currentCtx);
@@ -138,7 +177,12 @@ public class BallerinaParserErrorHandlerV4 {
         }
     }
 
-    private ArrayDeque<ParserRuleContext> cloneCtxStack() {
+    /**
+     * Get a snapshot of the current context stack.
+     * 
+     * @return Snapshot of the current context stack
+     */
+    private ArrayDeque<ParserRuleContext> getCtxStackSnapshot() {
         ArrayDeque<ParserRuleContext> stackCopy = new ArrayDeque<>();
         for (ParserRuleContext ctx : ctxStack) {
             stackCopy.add(ctx);
@@ -147,19 +191,9 @@ public class BallerinaParserErrorHandlerV4 {
         return stackCopy;
     }
 
-    public void removeInvalidToken() {
-        Token invalidToken = this.tokenReader.consumeNonTrivia();
-        // This means no match is found for the current token.
-        // Then consume it and return an error node
-        reportInvalidToken(invalidToken);
-
-        // FIXME: add this error node to the tree
-        // this.listner.exitErrorNode(nextToken.text);
-    }
-
     private void reportMissingTokenError(String message) {
         Token currentToken = this.tokenReader.head();
-        reportMissingTokenError(currentToken, message);
+        this.errorListener.reportMissingTokenError(currentToken, message);
     }
 
     private boolean isProductionWithAlternatives(ParserRuleContext currentCtx) {
@@ -176,21 +210,36 @@ public class BallerinaParserErrorHandlerV4 {
      * seekMatch methods
      */
 
-    private Result seekMatch(ParserRuleContext currentContext) {
-        // start a fresh seek with the next immediate token (peek(1), and the current context)
-        return seekMatchInSubTree(1, 0, currentContext);
+    /**
+     * Start a fresh search for a way to recover with the next immediate token (peek(1), and the current context).
+     * 
+     * @param currentCtx Current parser context
+     * @return Recovery result
+     */
+    private Result seekMatch(ParserRuleContext currentCtx) {
+        return seekMatchInSubTree(currentCtx, 1, 0);
     }
 
-    private Result seekMatchInSubTree(int lookahead, int currentDepth, ParserRuleContext currentContext) {
+    /**
+     * Search for a solution in a sub-tree/sub-path. This will take a snapshot of the current context stack
+     * and will operate on top of it, so that the original state of the parser will not be disturbed. On return
+     * the previous state of the parser contexts will be restored.
+     * 
+     * @param currentCtx Current context
+     * @param lookahead Position of the next token to consider, from the position of the original error.
+     * @param currentDepth Amount of distance traveled so far.
+     * @return Recovery result
+     */
+    private Result seekMatchInSubTree(ParserRuleContext currentCtx, int lookahead, int currentDepth) {
         ArrayDeque<ParserRuleContext> tempCtxStack = this.ctxStack;
-        this.ctxStack = cloneCtxStack();
-        Result result = seekMatch(lookahead, currentDepth, currentContext);
+        this.ctxStack = getCtxStackSnapshot();
+        Result result = seekMatch(currentCtx, lookahead, currentDepth);
         this.ctxStack = tempCtxStack;
         return result;
     }
 
     /**
-     * TODO: This is a duplicate method. Same as {@link BallerinaParser#isEndOfBlock}
+     * TODO: This is a duplicate method. Same as {@link BallerinaParser#isEndOfBlock}.
      * 
      * @param token
      * @return
@@ -208,7 +257,7 @@ public class BallerinaParserErrorHandlerV4 {
     }
 
     /**
-     * TODO: This is a duplicate method. Same as {@link BallerinaParser#isEndOfBlock}
+     * TODO: This is a duplicate method. Same as {@link BallerinaParser#isEndOfBlock}.
      * 
      * @param token
      * @return
@@ -216,6 +265,8 @@ public class BallerinaParserErrorHandlerV4 {
     private boolean isEndOfExpression(Token token) {
         switch (token.kind) {
             case CLOSE_BRACE:
+            case CLOSE_PARANTHESIS:
+            case CLOSE_BRACKET:
             case PUBLIC:
             case FUNCTION:
             case EOF:
@@ -227,7 +278,15 @@ public class BallerinaParserErrorHandlerV4 {
         }
     }
 
-    private Result seekMatch(int lookahead, int currentDepth, ParserRuleContext currentContext) {
+    /**
+     * Search for a solution.
+     * 
+     * @param currentCtx Current context
+     * @param lookahead Position of the next token to consider, relative to the position of the original error.
+     * @param currentDepth Amount of distance traveled so far.
+     * @return Recovery result
+     */
+    private Result seekMatch(ParserRuleContext currentCtx, int lookahead, int currentDepth) {
         boolean hasMatch;
         boolean skipRule;
         ArrayDeque<Solution> fixes = new ArrayDeque<>();
@@ -242,7 +301,7 @@ public class BallerinaParserErrorHandlerV4 {
                 break;
             }
 
-            switch (currentContext) {
+            switch (currentCtx) {
                 case FUNCTION_KEYWORD:
                     hasMatch = nextToken.kind == TokenKind.FUNCTION;
                     break;
@@ -253,9 +312,9 @@ public class BallerinaParserErrorHandlerV4 {
                     hasMatch = nextToken.kind == TokenKind.OPEN_PARANTHESIS;
                     break;
                 case PARAM_LIST:
-                    // TODO: if match, return the context
+                    // TODO: handle parameters list
                 case PARAMETER:
-                    // TODO: if match, return the context
+                    // TODO: handle parameters
                     skipRule = true;
                     break;
                 case CLOSE_PARANTHESIS:
@@ -292,7 +351,7 @@ public class BallerinaParserErrorHandlerV4 {
                     break;
                 case TOP_LEVEL_NODE:
                     hasMatch = nextToken.kind == TokenKind.PUBLIC;
-                    // skip the optional rule if no match is found
+                    // Skip the optional rule if no match is found
                     if (!hasMatch) {
                         skipRule = true;
                     }
@@ -308,13 +367,12 @@ public class BallerinaParserErrorHandlerV4 {
                         skipRule = true;
                         break;
                     }
-                    return seekInStatements(currentContext, nextToken, lookahead, currentDepth, matchingRulesCount,
-                            fixes);
+                    return seekInStatements(currentCtx, nextToken, lookahead, currentDepth, matchingRulesCount, fixes);
                 case BINARY_OPERATOR:
                     hasMatch = isBinaryOperator(nextToken);
                     break;
                 case EXPRESSION:
-                    return seekInExpression(currentContext, lookahead, currentDepth, matchingRulesCount, fixes);
+                    return seekInExpression(currentCtx, lookahead, currentDepth, matchingRulesCount, fixes);
 
                 // productions
                 case BINARY_EXPR_RHS:
@@ -327,20 +385,20 @@ public class BallerinaParserErrorHandlerV4 {
                 case ASSIGNMENT_STMT:
                 case VAR_DEF_STMT:
                 default:
-                    // stay at the same place
+                    // Stay at the same place
                     skipRule = true;
                     hasMatch = true;
                     break;
             }
 
             if (!hasMatch) {
-                Result fixedPathResult = fixAndContinue(lookahead, currentDepth + 1, currentContext);
+                Result fixedPathResult = fixAndContinue(currentCtx, lookahead, currentDepth + 1);
                 // Do not consider the current rule as match, since we had to fix it.
                 // i.e: do not increment the match count by 1;
                 return getFinalResult(matchingRulesCount, fixes, fixedPathResult);
             }
 
-            currentContext = getNextRule(currentContext, lookahead + 1);
+            currentCtx = getNextRule(currentCtx, lookahead + 1);
             if (!skipRule) {
                 // Try the next token with the next rule
                 currentDepth++;
@@ -353,17 +411,38 @@ public class BallerinaParserErrorHandlerV4 {
         return new Result(fixes, matchingRulesCount);
     }
 
+    /**
+     * Search for matching token sequences within the function body signatures and returns the most optimal solution.
+     * This will check whether the token stream best matches to a 'function-body-block' or a 'external-function-body'.
+     * 
+     * @param lookahead Position of the next token to consider, relative to the position of the original error
+     * @param currentDepth Amount of distance traveled so far
+     * @param currentMatches Matching tokens found so far
+     * @param fixes Fixes made so far
+     * @return Recovery result
+     */
     private Result seekInFuncBodies(int lookahead, int currentDepth, int currentMatches, ArrayDeque<Solution> fixes) {
         return seekInAlternativesPaths(lookahead, currentDepth, currentMatches, fixes, FUNC_BODIES);
     }
 
-    private Result seekInStatements(ParserRuleContext currentContext, Token nextToken, int lookahead, int currentDepth,
+    /**
+     * Search for matching token sequences within different kinds of statements and returns the most optimal solution.
+     * 
+     * @param currentCtx Current context
+     * @param nextToken Next token in the token stream
+     * @param lookahead Position of the next token to consider, relative to the position of the original error
+     * @param currentDepth Amount of distance traveled so far
+     * @param currentMatches Matching tokens found so far
+     * @param fixes Fixes made so far
+     * @return Recovery result
+     */
+    private Result seekInStatements(ParserRuleContext currentCtx, Token nextToken, int lookahead, int currentDepth,
                                     int currentMatches, ArrayDeque<Solution> fixes) {
         if (nextToken.kind == TokenKind.SEMICOLON) {
             // Semicolon at the start of a statement is a special case. This is equivalent to an empty
             // statement. So assume the fix for this is a REMOVE operation and continue from the next token.
-            Result result = seekMatchInSubTree(lookahead + 1, currentDepth, ParserRuleContext.STATEMENT);
-            fixes.add(new Solution(Action.REMOVE, currentContext, getParentContext(), nextToken.toString()));
+            Result result = seekMatchInSubTree(ParserRuleContext.STATEMENT, lookahead + 1, currentDepth);
+            fixes.add(new Solution(Action.REMOVE, currentCtx, getParentContext(), nextToken.toString()));
             fixes.addAll(result.fixes);
             currentMatches += result.matches;
             return new Result(fixes, currentMatches);
@@ -372,8 +451,18 @@ public class BallerinaParserErrorHandlerV4 {
         return seekInAlternativesPaths(lookahead, currentDepth, currentMatches, fixes, STATEMENTS);
     }
 
-    private Result seekInExpression(ParserRuleContext currentContext, int lookahead, int currentDepth,
-                                    int matchingRulesCount, ArrayDeque<Solution> fixes) {
+    /**
+     * Search for matching token sequences within expressions and returns the most optimal solution.
+     * 
+     * @param currentCtx Current context
+     * @param lookahead Position of the next token to consider, relative to the position of the original error
+     * @param currentDepth Amount of distance traveled so far
+     * @param currentMatches Matching tokens found so far
+     * @param fixes Fixes made so far
+     * @return Recovery result
+     */
+    private Result seekInExpression(ParserRuleContext currentCtx, int lookahead, int currentDepth, int currentMatches,
+                                    ArrayDeque<Solution> fixes) {
         Token nextToken = this.tokenReader.peek(lookahead);
         boolean hasMatch = false;
         switch (nextToken.kind) {
@@ -387,12 +476,13 @@ public class BallerinaParserErrorHandlerV4 {
                 break;
         }
 
+        currentDepth++;
         if (!hasMatch) {
-            Result fixedPathResult = fixAndContinue(lookahead, currentDepth + 1, currentContext);
-            return getFinalResult(matchingRulesCount, fixes, fixedPathResult);
+            Result fixedPathResult = fixAndContinue(currentCtx, lookahead, currentDepth);
+            return getFinalResult(currentMatches, fixes, fixedPathResult);
         } else {
             lookahead++;
-            matchingRulesCount++;
+            currentMatches++;
             nextToken = this.tokenReader.peek(lookahead);
             ParserRuleContext nextContext;
             if (isEndOfExpression(nextToken)) {
@@ -402,23 +492,32 @@ public class BallerinaParserErrorHandlerV4 {
             } else {
                 nextContext = ParserRuleContext.BINARY_EXPR_RHS;
             }
-            Result result = seekMatch(lookahead, currentDepth, nextContext);
-            return getFinalResult(matchingRulesCount, fixes, result);
+            Result result = seekMatch(nextContext, lookahead, currentDepth);
+            return getFinalResult(currentMatches, fixes, result);
         }
     }
 
+    /**
+     * Search for matching token sequences within the given alternative paths, and find the most optimal solution.
+     * 
+     * @param lookahead Position of the next token to consider, relative to the position of the original error
+     * @param currentDepth Amount of distance traveled so far
+     * @param currentMatches Matching tokens found so far
+     * @param fixes Fixes made so far
+     * @return Recovery result
+     */
     private Result seekInAlternativesPaths(int lookahead, int currentDepth, int currentMatches,
                                            ArrayDeque<Solution> fixes, ParserRuleContext[] alternativeRules) {
 
         @SuppressWarnings("unchecked")
-        List<Result>[] results = new List[LOOKAHEAD_LIMIT + 1];
+        List<Result>[] results = new List[LOOKAHEAD_LIMIT];
         int bestMatchIndex = 0;
 
         // Visit all the alternative rules and get their results. Arrange them in way
-        // such that results with the same number of matches are together. This is
+        // such that results with the same number of matches are put together. This is
         // done so that we can easily pick the best, without iterating through them.
         for (ParserRuleContext rule : alternativeRules) {
-            Result result = seekMatchInSubTree(lookahead, currentDepth, rule);
+            Result result = seekMatchInSubTree(rule, lookahead, currentDepth);
             List<Result> similarResutls = results[result.matches];
             if (similarResutls == null) {
                 similarResutls = new ArrayList<>(LOOKAHEAD_LIMIT);
@@ -455,49 +554,100 @@ public class BallerinaParserErrorHandlerV4 {
         return getFinalResult(currentMatches, fixes, bestMatch);
     }
 
+    /**
+     * Combine a given result with the current results, and get the final result.
+     * 
+     * @param currentMatches Matches found so far
+     * @param fixes FIxes found so far
+     * @param bestMatch Result found in the sub-tree, that requires to be merged with the current results
+     * @return Final result
+     */
     private Result getFinalResult(int currentMatches, ArrayDeque<Solution> fixes, Result bestMatch) {
         currentMatches += bestMatch.matches;
         fixes.addAll(bestMatch.fixes);
         return new Result(fixes, currentMatches);
     }
 
-    private Result fixAndContinue(int lookahead, int currentDepth, ParserRuleContext currentContext) {
+    /**
+     * <p>
+     * Fix the error at the current position and continue forward to find the best path. This method
+     * tries to fix the parser error using following steps:
+     * <ol>
+     * <li>
+     * Insert a token and see how far the parser can proceed.
+     * </li>
+     * <li>
+     * Delete a token and see how far the parser can proceed.
+     * </li>
+     * </ol>
+     * 
+     * Then decides the best action to perform (whether to insert or remove a token), using the result
+     * of the above two steps, based on the following criteria:
+     * <ol>
+     * <li>
+     * Pick the solution with the longest matching sequence.
+     * </li>
+     * <li>
+     * If there's a tie, then check for the solution which requires lowest number of 'fixes'.
+     * </li>
+     * </li>
+     * <li>
+     * If there's a tie, then give priority for the 'insertion' as that doesn't require to remove
+     * an input a user has given.
+     * </li>
+     * </ol>
+     * </p>
+     * 
+     * @param currentCtx Current parser context
+     * @param lookahead Position of the next token to consider, relative to the position of the original error
+     * @param currentDepth Amount of distance traveled so far
+     * @return Recovery result
+     */
+    private Result fixAndContinue(ParserRuleContext currentCtx, int lookahead, int currentDepth) {
         // NOTE: Below order is important. We have to visit the current context first, before
         // getting and visiting the nextContext. Because getting the next context is a stateful
         // operation, as it could update (push/pop) the current context stack.
 
         // Remove current token. That means continue with the NEXT token, with the CURRENT context
-        Result deletionResult = seekMatchInSubTree(lookahead + 1, currentDepth, currentContext);
+        Result deletionResult = seekMatchInSubTree(currentCtx, lookahead + 1, currentDepth);
 
-        // Insert the missing token. That means continue the CURRENT token, with the NEXT Context
-        ParserRuleContext nextContext = getNextRule(currentContext, lookahead);
-        Result insertionResult = seekMatchInSubTree(lookahead, currentDepth, nextContext);
+        // Insert the missing token. That means continue the CURRENT token, with the NEXT context.
+        // At this point 'lookahead' refers to the next token position, since there is a missing
+        // token at the current position. Hence we don't need to increment the 'lookahead' when
+        // calling 'getNextRule'.
+        ParserRuleContext nextCtx = getNextRule(currentCtx, lookahead);
+        Result insertionResult = seekMatchInSubTree(nextCtx, lookahead, currentDepth);
+
+        // TODO: Add tie-break. i.e: "insertionResult.matches == deletionResult.matches" scenario.
 
         Result fixedPathResult;
         Solution action;
-
-        // TODO: Add tie-break. i.e: "insertionResult.matches == deletionResult.matches" scenario
-
         if (insertionResult.matches == 0 && deletionResult.matches == 0) {
             fixedPathResult = insertionResult;
         } else if (insertionResult.matches >= deletionResult.matches) {
-            action = new Solution(Action.INSERT, currentContext, getParentContext(), currentContext.toString());
+            action = new Solution(Action.INSERT, currentCtx, getParentContext(), currentCtx.toString());
             insertionResult.fixes.push(action);
             fixedPathResult = insertionResult;
         } else {
-            action = new Solution(Action.REMOVE, currentContext, getParentContext(),
-                    this.tokenReader.peek(lookahead).text);
+            action = new Solution(Action.REMOVE, currentCtx, getParentContext(), this.tokenReader.peek(lookahead).text);
             deletionResult.fixes.push(action);
             fixedPathResult = deletionResult;
         }
         return fixedPathResult;
     }
 
-    private ParserRuleContext getNextRule(ParserRuleContext currentContext, int nextLookahead) {
+    /**
+     * Get the next parser rule/context given the current parser context.
+     * 
+     * @param currentCtx Current parser context
+     * @param nextLookahead Position of the next token to consider, relative to the position of the original error
+     * @return Next parser context
+     */
+    private ParserRuleContext getNextRule(ParserRuleContext currentCtx, int nextLookahead) {
         // If this is a production, then push the context to the stack.
         // We can do this within the same switch-case that follows afters this one.
-        // But doing it separately for the sake of maintainability.
-        switch (currentContext) {
+        // But doing it separately for the sake of readability/maintainability.
+        switch (currentCtx) {
             case COMP_UNIT:
             case FUNC_DEFINITION:
             case FUNC_SIGNATURE:
@@ -508,13 +658,13 @@ public class BallerinaParserErrorHandlerV4 {
             case VAR_DEF_STMT:
             case ASSIGNMENT_STMT:
                 // case EXPRESSION:
-                pushContext(currentContext);
+                pushContext(currentCtx);
             default:
                 break;
         }
 
         ParserRuleContext parentCtx;
-        switch (currentContext) {
+        switch (currentCtx) {
             case COMP_UNIT:
                 return ParserRuleContext.TOP_LEVEL_NODE;
             case FUNC_DEFINITION:
@@ -644,19 +794,37 @@ public class BallerinaParserErrorHandlerV4 {
                 return ParserRuleContext.EXPRESSION;
             case ANNOTATION_ATTACHMENT:
             default:
-                throw new IllegalStateException("cannot find the next rule for: " + currentContext);
+                throw new IllegalStateException("cannot find the next rule for: " + currentCtx);
         }
     }
 
+    /**
+     * Check whether the given context is a statement.
+     * 
+     * @param ctx Parser context to check
+     * @return <code>true</code> if the given context is a statement. <code>false</code> otherwise
+     */
     private boolean isStatement(ParserRuleContext parentCtx) {
         return parentCtx == ParserRuleContext.STATEMENT || parentCtx == ParserRuleContext.VAR_DEF_STMT ||
                 parentCtx == ParserRuleContext.ASSIGNMENT_STMT;
     }
 
-    private boolean isExpression(ParserRuleContext parentCtx) {
-        return parentCtx == ParserRuleContext.EXPRESSION;
+    /**
+     * Check whether the given context is an expression.
+     * 
+     * @param ctx Parser context to check
+     * @return <code>true</code> if the given context is an expression. <code>false</code> otherwise
+     */
+    private boolean isExpression(ParserRuleContext ctx) {
+        return ctx == ParserRuleContext.EXPRESSION;
     }
 
+    /**
+     * Check whether the given token refers to a binary operator.
+     * 
+     * @param token Token to check
+     * @return <code>true</code> if the given token refers to a binary operator. <code>false</code> otherwise
+     */
     private boolean isBinaryOperator(Token token) {
         switch (token.kind) {
             case ADD:
@@ -674,6 +842,10 @@ public class BallerinaParserErrorHandlerV4 {
         }
     }
 
+    /**
+     * Represent a result of a token-sequence-search in a sub-tree. The result will contain the fixes required to
+     * traverse in that sub-tree, and the number of matching tokens it found, without the fixed tokens.
+     */
     private class Result {
         private int matches;
         private ArrayDeque<Solution> fixes;
@@ -682,18 +854,15 @@ public class BallerinaParserErrorHandlerV4 {
             this.fixes = fixes;
             this.matches = matches;
         }
-
-        public Result(int matches) {
-            this.fixes = new ArrayDeque<>();
-            this.matches = matches;
-        }
-
-        public Result() {
-            this.fixes = new ArrayDeque<>();
-            this.matches = 0;
-        }
     }
 
+    /**
+     * Represents a solution/fix for a parser error. A {@link Solution} consists of the parser context where the error
+     * was encountered, the enclosing parser context, the token with the error, and the {@link Action} required to
+     * recover.
+     * 
+     * @since 1.2.0
+     */
     private class Solution {
 
         private ParserRuleContext ctx;
@@ -712,6 +881,15 @@ public class BallerinaParserErrorHandlerV4 {
         public String toString() {
             return action.toString() + "'" + token + "'";
         }
+    }
+
+    /**
+     * Represents the actions that can be taken to recover from a parser error.
+     * 
+     * @since 1.2.0
+     */
+    enum Action {
+        INSERT, REMOVE;
     }
 
     private class Key {
@@ -741,9 +919,5 @@ public class BallerinaParserErrorHandlerV4 {
             }
             return ((Key) obj).ctx.equals(ctx) && ((Key) obj).token.equals(token);
         }
-    }
-
-    enum Action {
-        INSERT, REMOVE;
     }
 }

@@ -29,6 +29,6 @@ public class BinaryExpressionNode extends ASTNode {
 
     @Override
     public String toString() {
-        return this.lhsExpr + " " + this.operator + " " + rhsExpr;
+        return "(" + this.lhsExpr + " " + this.operator + " " + rhsExpr + ")";
     }
 }

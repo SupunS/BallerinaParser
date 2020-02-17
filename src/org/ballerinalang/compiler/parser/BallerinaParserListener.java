@@ -202,9 +202,6 @@ public class BallerinaParserListener {
         this.nodesStack.push(new OperatorNode(content));
     }
 
-    /**
-     * 
-     */
     public void endBinaryExpression() {
         BinaryExpressionNode binaryExpr = new BinaryExpressionNode();
         binaryExpr.rhsExpr = this.nodesStack.pop();
