@@ -115,6 +115,10 @@ public class TokenGenerator {
         return newToken("%", TokenKind.MOD);
     }
 
+    public Token getLessThanOp() {
+        return newToken("<", TokenKind.LT);
+    }
+
     public Token getEqualOp() {
         return newToken("==", TokenKind.EQUAL);
     }

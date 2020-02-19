@@ -564,13 +564,15 @@ public class BallerinaParser {
      */
 
     private void parseExpression() {
-        // switchContext(ParserRuleContext.EXPRESSION);
-        parseExpressionStart();
-        parseBinaryExprRhs();
-        // revertContext();
+        parseExpression(OperatorPrecedence.BINARY_COMPARE);
     }
 
-    private void parseExpressionStart() {
+    private void parseExpression(OperatorPrecedence precedenceLevel) {
+        parseTerminalExpression();
+        parseBinaryExprRhs(precedenceLevel);
+    }
+
+    private void parseTerminalExpression() {
         Token token = peek();
         switch (token.kind) {
             case FLOAT_LITERAL:
@@ -591,16 +593,19 @@ public class BallerinaParser {
     }
 
     private void parseBinaryExprRhs() {
+        parseBinaryExprRhs(OperatorPrecedence.BINARY_COMPARE);
+    }
+
+    private void parseBinaryExprRhs(OperatorPrecedence precedenceLevel) {
         Token token = peek();
         if (isEndOfExpression(token)) {
             return;
         }
 
         TokenKind binaryOpKind;
+        boolean operatorRecovered = false;
         if (isBinaryOperator(token.kind)) {
-            Token binaryOp = consume();
-            this.listner.exitOperator(binaryOp); // operator
-            binaryOpKind = binaryOp.kind;
+            binaryOpKind = token.kind;
         } else {
             Action action = recover(token, ParserRuleContext.BINARY_EXPR_RHS);
 
@@ -612,25 +617,67 @@ public class BallerinaParser {
                 return;
             }
 
-            // We come here if the operator is missing. Hence default it to '+', and continue.
-            binaryOpKind = TokenKind.ADD;
+            // We come here if the operator is missing. Treat this as injecting an operator
+            // that matches to the current operator precedence level, and continue.
+            binaryOpKind = getOperatorKindToInsert(precedenceLevel);
+            operatorRecovered = true;
         }
 
+        // If the precedence level of the operator that was being parsed is higher than
+        // the newly found (next) operator, then return and finish the previous expr,
+        // because it has a higher precedence.
+        OperatorPrecedence operatorPrecedence = getOpPrecedence(binaryOpKind);
+        if (precedenceLevel.isHigherThan(operatorPrecedence)) {
+            return;
+        }
+
+        // Parse the operator
+        if (!operatorRecovered) {
+            Token binaryOp = consume();
+            this.listner.exitOperator(binaryOp); // operator
+        }
+
+        // Parse expression that follows the binary operator, until a operator
+        // with different precedence is encountered. If an operator with lower
+        // precedence is reached, then come back here and finish the current
+        // binary expr. If a an operator with higher precedence level is reached,
+        // then complete that binary-expr, come back here and finish the current
+        // expr.
+        parseExpression(operatorPrecedence);
+        this.listner.endBinaryExpression();
+
+        // Then continue the operators with the same precedence level.
+        parseBinaryExprRhs(precedenceLevel);
+    }
+
+    private OperatorPrecedence getOpPrecedence(TokenKind binaryOpKind) {
         switch (binaryOpKind) {
             case MUL:
             case DIV:
-                parseExpressionStart();
-                break;
+                return OperatorPrecedence.MULTIPLICATIVE;
             case ADD:
             case SUB:
-                parseExpression();
-                break;
+                return OperatorPrecedence.ADDITIVE;
+            case GT:
+            case LT:
+                return OperatorPrecedence.BINARY_COMPARE;
             default:
                 throw new UnsupportedOperationException("Unsupported binary operator '" + binaryOpKind + "'");
         }
+    }
 
-        this.listner.endBinaryExpression();
-        parseBinaryExprRhs();
+    private TokenKind getOperatorKindToInsert(OperatorPrecedence opPrecedenceLevel) {
+        switch (opPrecedenceLevel) {
+            case MULTIPLICATIVE:
+                return TokenKind.MUL;
+            case ADDITIVE:
+                return TokenKind.ADD;
+            case BINARY_COMPARE:
+                return TokenKind.LT;
+            default:
+                throw new UnsupportedOperationException(
+                        "Unsupported operator precedence level'" + opPrecedenceLevel + "'");
+        }
     }
 
     private void parseBracedExpression() {

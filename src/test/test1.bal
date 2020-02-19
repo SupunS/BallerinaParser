@@ -77,11 +77,13 @@ public function kkk() {
 }
 
 public function lll() {
-    x = a + b * c - d / e;
+    x = a + b * c * d *g *h - e / f;
     x = (a + b) * (c - d) / e;
 
     x = (a + b * c;
     x = a + b * c);
     x = (a + (b * c);
+
+    x = a + b < c - d /  e;
 }
 

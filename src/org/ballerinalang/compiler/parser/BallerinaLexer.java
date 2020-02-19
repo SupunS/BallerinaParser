@@ -116,7 +116,9 @@ public class BallerinaLexer {
             case LexerTerminals.MOD:
                 token = this.tokenGenerator.getModulus();
                 break;
-
+            case LexerTerminals.LT:
+                token = this.tokenGenerator.getLessThanOp();
+                break;
             // Numbers
             case '0':
             case '1':

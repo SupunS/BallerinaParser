@@ -52,7 +52,7 @@ public class LexerTerminals {
     public static final char DIV = '/';
     public static final char MOD = '%';
     public static final char GT = '>';
-    public static final char LT = '>';
+    public static final char LT = '<';
 
     // Other
     public static final char NEWLINE = '\n'; // equivalent to 0xA
