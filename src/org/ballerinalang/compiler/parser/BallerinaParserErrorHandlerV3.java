@@ -302,15 +302,15 @@ public class BallerinaParserErrorHandlerV3 {
                     }
                     break;
                 case FUNC_NAME:
-                    nextContext = ParserRuleContext.OPEN_PARANTHESIS;
+                    nextContext = ParserRuleContext.OPEN_PARENTHESIS;
                     if (nextToken.kind != TokenKind.IDENTIFIER) {
                         mismatchFound = true;
                     }
                     break;
                 case FUNC_SIGNATURE:
-                case OPEN_PARANTHESIS:
-                    nextContext = ParserRuleContext.CLOSE_PARANTHESIS;
-                    if (nextToken.kind != TokenKind.OPEN_PARANTHESIS) {
+                case OPEN_PARENTHESIS:
+                    nextContext = ParserRuleContext.CLOSE_PARENTHESIS;
+                    if (nextToken.kind != TokenKind.OPEN_PARENTHESIS) {
                         mismatchFound = true;
                     }
                     break;
@@ -322,11 +322,11 @@ public class BallerinaParserErrorHandlerV3 {
                     k--; // stay at the same place
                     matchingRulesCount--;
                     currentDepth--;
-                    nextContext = ParserRuleContext.CLOSE_PARANTHESIS;
+                    nextContext = ParserRuleContext.CLOSE_PARENTHESIS;
                     break;
-                case CLOSE_PARANTHESIS:
+                case CLOSE_PARENTHESIS:
                     nextContext = ParserRuleContext.RETURNS_KEYWORD;
-                    if (nextToken.kind != TokenKind.CLOSE_PARANTHESIS) {
+                    if (nextToken.kind != TokenKind.CLOSE_PARENTHESIS) {
                         mismatchFound = true;
                     }
                     break;

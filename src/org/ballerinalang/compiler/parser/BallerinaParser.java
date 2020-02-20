@@ -44,6 +44,11 @@ public class BallerinaParser {
         parse(ParserRuleContext.COMP_UNIT);
     }
 
+    /**
+     * Parse the input starting from a given context.
+     * 
+     * @param context Context to start parsing
+     */
     public void parse(ParserRuleContext context) {
         switch (context) {
             case COMP_UNIT:
@@ -56,10 +61,10 @@ public class BallerinaParser {
                 parseFunctionBody();
                 break;
             case OPEN_BRACE:
-                parseLeftBrace();
+                parseOpenBrace();
                 break;
             case CLOSE_BRACE:
-                parseRightBrace();
+                parseCloseBrace();
                 break;
             case FUNC_DEFINITION:
                 parseFunctionDefinition();
@@ -70,8 +75,8 @@ public class BallerinaParser {
             case FUNC_SIGNATURE:
                 parseFunctionSignature();
                 break;
-            case OPEN_PARANTHESIS:
-                parseOpenParanthesis();
+            case OPEN_PARENTHESIS:
+                parseOpenParenthesis();
                 break;
             case PARAMETER:
                 // TODO
@@ -90,7 +95,7 @@ public class BallerinaParser {
                 break;
             case ANNOTATION_ATTACHMENT:
             case EXTERNAL_KEYWORD:
-                parseExternalFunctionBodyEnd();
+                parseExternalKeyword();
                 break;
             case FUNC_BODY_BLOCK:
                 parseFunctionBodyBlock();
@@ -98,8 +103,8 @@ public class BallerinaParser {
             case SEMICOLON:
                 parseStatementEnd();
                 break;
-            case CLOSE_PARANTHESIS:
-                parseCloseParanthesis();
+            case CLOSE_PARENTHESIS:
+                parseCloseParenthesis();
                 break;
             case VARIABLE_NAME:
                 parseVariableName();
@@ -110,8 +115,8 @@ public class BallerinaParser {
             case STATEMENT:
                 parseStatement();
                 break;
-            case VAR_DEF_STMT:
-                parseVariableDefStmt();
+            case VAR_DECL_STMT:
+                parseVariableDeclStmt();
                 break;
             case ASSIGNMENT_STMT:
                 parseAssignmentStmt();
@@ -165,6 +170,9 @@ public class BallerinaParser {
         revertContext();
     }
 
+    /**
+     * Parse top level nodes.
+     */
     private void parseTopLevelNode() {
         Token token = peek();
         switch (token.kind) {
@@ -188,6 +196,9 @@ public class BallerinaParser {
     }
 
     /**
+     * <p>
+     * Parse function definition. A function definition has the following structure.
+     * </p>
      * <code>
      * function-defn := FUNCTION identifier function-signature function-body
      * </code>
@@ -216,46 +227,49 @@ public class BallerinaParser {
     }
 
     /**
+     * <p>
+     * Parse function signature. A function signature has the following structure.
+     * </p>
      * <code>
      * function-signature := ( param-list ) return-type-descriptor
      * </code>
      */
     private void parseFunctionSignature() {
         switchContext(ParserRuleContext.FUNC_SIGNATURE);
-        parseOpenParanthesis();
+        parseOpenParenthesis();
         parseParamList();
-        parseCloseParanthesis();
+        parseCloseParenthesis();
         parseReturnTypeDescriptor();
         this.listner.exitFunctionSignature();
         revertContext();
     }
 
     /**
-     * 
+     * Parse open parenthesis.
      */
-    private void parseCloseParanthesis() {
+    private void parseOpenParenthesis() {
         Token token = peek();
-        if (token.kind == TokenKind.CLOSE_PARANTHESIS) {
-            this.listner.exitSyntaxNode(consume()); // )
-        } else {
-            recover(token, ParserRuleContext.CLOSE_PARANTHESIS);
-        }
-    }
-
-    /**
-     * 
-     */
-    private void parseOpenParanthesis() {
-        Token token = peek();
-        if (token.kind == TokenKind.OPEN_PARANTHESIS) {
+        if (token.kind == TokenKind.OPEN_PARENTHESIS) {
             this.listner.exitSyntaxNode(consume()); // (
         } else {
-            recover(token, ParserRuleContext.OPEN_PARANTHESIS);
+            recover(token, ParserRuleContext.OPEN_PARENTHESIS);
         }
     }
 
     /**
-     * 
+     * Parse close parenthesis.
+     */
+    private void parseCloseParenthesis() {
+        Token token = peek();
+        if (token.kind == TokenKind.CLOSE_PARENTHESIS) {
+            this.listner.exitSyntaxNode(consume()); // )
+        } else {
+            recover(token, ParserRuleContext.CLOSE_PARENTHESIS);
+        }
+    }
+
+    /**
+     * Parse parameter list.
      */
     private void parseParamList() {
         switchContext(ParserRuleContext.PARAM_LIST);
@@ -271,6 +285,8 @@ public class BallerinaParser {
     }
 
     /**
+     * Parse return type descriptor of a function. A return type descriptor has the following structure.
+     * 
      * <code>return-type-descriptor := [ returns annots type-descriptor ]</code>
      */
     private void parseReturnTypeDescriptor() {
@@ -295,6 +311,9 @@ public class BallerinaParser {
     }
 
     /**
+     * <p>
+     * Parse a type descriptor. A type descriptor has the following structure.
+     * </p>
      * <code>type-descriptor :=
      *      &nbsp;simple-type-descriptor</br>
      *      &nbsp;| structured-type-descriptor</br>
@@ -331,6 +350,9 @@ public class BallerinaParser {
     }
 
     /**
+     * <p>
+     * Parse function body. A function body has the following structure.
+     * </p>
      * <code>
      * function-body := function-body-block | external-function-body
      * external-function-body := = annots external ;
@@ -355,6 +377,10 @@ public class BallerinaParser {
     }
 
     /**
+     * <p>
+     * Parse function body block. A function body block has the following structure.
+     * </p>
+     * 
      * <code>
      * function-body-block := { [default-worker-init, named-worker-decl+] default-worker }</br>
      * default-worker-init := sequence-stmt</br>
@@ -365,16 +391,18 @@ public class BallerinaParser {
      */
     private void parseFunctionBodyBlock() {
         switchContext(ParserRuleContext.FUNC_BODY_BLOCK);
-        parseLeftBrace();
+        parseOpenBrace();
         parseStatements(); // TODO: allow workers
-        parseRightBrace();
+        parseCloseBrace();
         this.listner.exitFunctionBodyBlock();
         revertContext();
     }
 
     /**
-     * @param token
-     * @return
+     * Check whether the given token is an end of a block.
+     * 
+     * @param token Token to check
+     * @return <code>true</code> if the token represents an end of a block. <code>false</code> otherwise
      */
     private boolean isEndOfBlock(Token token) {
         switch (token.kind) {
@@ -388,6 +416,9 @@ public class BallerinaParser {
         }
     }
 
+    /**
+     * Parse variable name
+     */
     private void parseVariableName() {
         Token token = peek();
         if (token.kind == TokenKind.IDENTIFIER) {
@@ -399,21 +430,9 @@ public class BallerinaParser {
     }
 
     /**
-     * 
+     * Parse open brace.
      */
-    private void parseRightBrace() {
-        Token token = peek();
-        if (token.kind == TokenKind.CLOSE_BRACE) {
-            this.listner.exitSyntaxNode(consume()); // }
-        } else {
-            recover(token, ParserRuleContext.CLOSE_BRACE);
-        }
-    }
-
-    /**
-     * 
-     */
-    private void parseLeftBrace() {
+    private void parseOpenBrace() {
         Token token = peek();
         if (token.kind == TokenKind.OPEN_BRACE) {
             this.listner.exitSyntaxNode(consume()); // {
@@ -423,6 +442,21 @@ public class BallerinaParser {
     }
 
     /**
+     * Parse right brace.
+     */
+    private void parseCloseBrace() {
+        Token token = peek();
+        if (token.kind == TokenKind.CLOSE_BRACE) {
+            this.listner.exitSyntaxNode(consume()); // }
+        } else {
+            recover(token, ParserRuleContext.CLOSE_BRACE);
+        }
+    }
+
+    /**
+     * <p>
+     * Parse external function body. An external function body has the following structure.
+     * </p>
      * <code>
      * external-function-body := = annots external ;
      * </code>
@@ -431,14 +465,14 @@ public class BallerinaParser {
         switchContext(ParserRuleContext.EXTERNAL_FUNC_BODY);
         parseAssignOp();
         parseAnnotations();
-        parseExternalFunctionBodyEnd();
+        parseExternalKeyword();
         parseStatementEnd();
         this.listner.exitExternalFunctionBody();
         revertContext();
     }
 
     /**
-     * 
+     * Parse semicolon.
      */
     private void parseStatementEnd() {
         Token token = peek();
@@ -450,9 +484,9 @@ public class BallerinaParser {
     }
 
     /**
-     * 
+     * Parse <code>external</code> keyword.
      */
-    private void parseExternalFunctionBodyEnd() {
+    private void parseExternalKeyword() {
         Token token = peek();
         if (token.kind == TokenKind.EXTERNAL) {
             this.listner.exitSyntaxNode(consume()); // 'external' keyword
@@ -465,6 +499,9 @@ public class BallerinaParser {
      * Operators
      */
 
+    /**
+     * Parse assign operator.
+     */
     private void parseAssignOp() {
         Token token = peek();
         if (token.kind == TokenKind.ASSIGN) {
@@ -474,6 +511,12 @@ public class BallerinaParser {
         }
     }
 
+    /**
+     * Check whether the given token kind is a binary operator.
+     * 
+     * @param kind Token kind
+     * @return <code>true</code> if the token kind refers to a binary operator. <code>false</code> otherwise
+     */
     private boolean isBinaryOperator(TokenKind kind) {
         switch (kind) {
             case ADD:
@@ -496,7 +539,7 @@ public class BallerinaParser {
      */
 
     /**
-     * 
+     * Parse statements, until an end of a block is reached.
      */
     private void parseStatements() {
         // TODO: parse statements/worker declrs
@@ -507,12 +550,15 @@ public class BallerinaParser {
         }
     }
 
+    /**
+     * Parse a single statement.
+     */
     private void parseStatement() {
         Token token = peek();
         switch (token.kind) {
             case TYPE:
                 // TODO: add other statements that starts with a type
-                parseVariableDefStmt();
+                parseVariableDeclStmt();
                 break;
             case IDENTIFIER:
                 parseAssignmentStmt();
@@ -527,8 +573,21 @@ public class BallerinaParser {
         }
     }
 
-    private void parseVariableDefStmt() {
-        switchContext(ParserRuleContext.VAR_DEF_STMT);
+    /**
+     * <p>
+     * Parse local variable declaration statement. A local variable declaration can take following format.
+     * </p>
+     * 
+     * <code>
+     * local-var-decl-stmt := local-init-var-decl-stmt | local-no-init-var-decl-stmt
+     * <br/><br/>
+     * local-init-var-decl-stmt := [annots] [final] typed-binding-pattern = action-or-expr ;
+     * <br/><br/>
+     * local-no-init-var-decl-stmt := [annots] [final] type-descriptor variable-name ;
+     * </code>
+     */
+    private void parseVariableDeclStmt() {
+        switchContext(ParserRuleContext.VAR_DECL_STMT);
 
         parseTypeDescriptor();
         parseVariableName();
@@ -547,6 +606,12 @@ public class BallerinaParser {
         revertContext();
     }
 
+    /**
+     * <p>
+     * Parse assignment statement, which takes the following format.
+     * </p>
+     * <code>assignment-stmt := lvexpr = action-or-expr ;</code>
+     */
     private void parseAssignmentStmt() {
         switchContext(ParserRuleContext.ASSIGNMENT_STMT);
 
@@ -563,15 +628,27 @@ public class BallerinaParser {
      * Expressions
      */
 
+    /**
+     * Parse expression. This will start parsing expressions from the lowest level of precedence.
+     */
     private void parseExpression() {
         parseExpression(OperatorPrecedence.BINARY_COMPARE);
     }
 
+    /**
+     * Parse an expression that has an equal or higher precedence than a given level.
+     * 
+     * @param precedenceLevel Precedence level of expression to be parsed
+     */
     private void parseExpression(OperatorPrecedence precedenceLevel) {
         parseTerminalExpression();
         parseBinaryExprRhs(precedenceLevel);
     }
 
+    /**
+     * Parse terminal expressions. A terminal expression has the highest precedence level
+     * out of all expressions, and will be at the leaves of an expression tree.
+     */
     private void parseTerminalExpression() {
         Token token = peek();
         switch (token.kind) {
@@ -583,7 +660,7 @@ public class BallerinaParser {
             case IDENTIFIER:
                 parseVariableName();
                 break;
-            case OPEN_PARANTHESIS:
+            case OPEN_PARENTHESIS:
                 parseBracedExpression();
                 break;
             default:
@@ -592,10 +669,19 @@ public class BallerinaParser {
         }
     }
 
+    /**
+     * Parse the right-hand-side of a binary expression.
+     */
     private void parseBinaryExprRhs() {
         parseBinaryExprRhs(OperatorPrecedence.BINARY_COMPARE);
     }
 
+    /**
+     * <p>
+     * Parse the right-hand-side of a binary expression.
+     * </p>
+     * <code>binary-expr-rhs := (binary-op expression)*</code>
+     */
     private void parseBinaryExprRhs(OperatorPrecedence precedenceLevel) {
         Token token = peek();
         if (isEndOfExpression(token)) {
@@ -650,6 +736,12 @@ public class BallerinaParser {
         parseBinaryExprRhs(precedenceLevel);
     }
 
+    /**
+     * Get the precedence of a given operator.
+     * 
+     * @param binaryOpKind Operator kind
+     * @return Precedence of the given operator
+     */
     private OperatorPrecedence getOpPrecedence(TokenKind binaryOpKind) {
         switch (binaryOpKind) {
             case MUL:
@@ -666,6 +758,14 @@ public class BallerinaParser {
         }
     }
 
+    /**
+     * <p>
+     * Get the operator kind to insert during recovery, given the precedence level.
+     * </p>
+     * 
+     * @param opPrecedenceLevel Precedence of the given operator
+     * @return
+     */
     private TokenKind getOperatorKindToInsert(OperatorPrecedence opPrecedenceLevel) {
         switch (opPrecedenceLevel) {
             case MULTIPLICATIVE:
@@ -680,17 +780,29 @@ public class BallerinaParser {
         }
     }
 
+    /**
+     * <p>
+     * Parse braced expression.
+     * </p>
+     * <code>braced-expr := ( expression )</code>
+     */
     private void parseBracedExpression() {
-        parseOpenParanthesis();
+        parseOpenParenthesis();
         parseExpression();
-        parseCloseParanthesis();
+        parseCloseParenthesis();
         this.listner.endBracedExpression();
     }
 
+    /**
+     * Check whether the given token is an end of a expression.
+     * 
+     * @param token Token to check
+     * @return <code>true</code> if the token represents an end of a block. <code>false</code> otherwise
+     */
     private boolean isEndOfExpression(Token token) {
         switch (token.kind) {
             case CLOSE_BRACE:
-            case CLOSE_PARANTHESIS:
+            case CLOSE_PARENTHESIS:
             case CLOSE_BRACKET:
             case SEMICOLON:
             case COMMA:
@@ -703,6 +815,9 @@ public class BallerinaParser {
         }
     }
 
+    /**
+     * Parse a literal expression.
+     */
     private void parseLiteral() {
         this.listner.exitLiteral(consume()); // literal
     }

@@ -59,7 +59,7 @@ public class BallerinaParserErrorHandler {
             { ParserRuleContext.FUNC_BODY_BLOCK, ParserRuleContext.EXTERNAL_FUNC_BODY };
 
     private static final ParserRuleContext[] STATEMENTS =
-            { ParserRuleContext.ASSIGNMENT_STMT, ParserRuleContext.VAR_DEF_STMT };
+            { ParserRuleContext.ASSIGNMENT_STMT, ParserRuleContext.VAR_DECL_STMT };
 
     /**
      * Limit for the distance to travel, to determine a successful lookahead.
@@ -265,7 +265,7 @@ public class BallerinaParserErrorHandler {
     private boolean isEndOfExpression(Token token) {
         switch (token.kind) {
             case CLOSE_BRACE:
-            case CLOSE_PARANTHESIS:
+            case CLOSE_PARENTHESIS:
             case CLOSE_BRACKET:
             case PUBLIC:
             case FUNCTION:
@@ -308,8 +308,8 @@ public class BallerinaParserErrorHandler {
                 case FUNC_NAME:
                     hasMatch = nextToken.kind == TokenKind.IDENTIFIER;
                     break;
-                case OPEN_PARANTHESIS:
-                    hasMatch = nextToken.kind == TokenKind.OPEN_PARANTHESIS;
+                case OPEN_PARENTHESIS:
+                    hasMatch = nextToken.kind == TokenKind.OPEN_PARENTHESIS;
                     break;
                 case PARAM_LIST:
                     // TODO: handle parameters list
@@ -317,8 +317,8 @@ public class BallerinaParserErrorHandler {
                     // TODO: handle parameters
                     skipRule = true;
                     break;
-                case CLOSE_PARANTHESIS:
-                    hasMatch = nextToken.kind == TokenKind.CLOSE_PARANTHESIS;
+                case CLOSE_PARENTHESIS:
+                    hasMatch = nextToken.kind == TokenKind.CLOSE_PARENTHESIS;
                     break;
                 case RETURNS_KEYWORD:
                     hasMatch = nextToken.kind == TokenKind.RETURNS;
@@ -383,7 +383,7 @@ public class BallerinaParserErrorHandler {
                 case EXTERNAL_FUNC_BODY:
                 case FUNC_BODY_BLOCK:
                 case ASSIGNMENT_STMT:
-                case VAR_DEF_STMT:
+                case VAR_DECL_STMT:
                 default:
                     // Stay at the same place
                     skipRule = true;
@@ -655,7 +655,7 @@ public class BallerinaParserErrorHandler {
             case EXTERNAL_FUNC_BODY:
             case FUNC_BODY_BLOCK:
             case STATEMENT:
-            case VAR_DEF_STMT:
+            case VAR_DECL_STMT:
             case ASSIGNMENT_STMT:
                 // case EXPRESSION:
                 pushContext(currentCtx);
@@ -670,7 +670,7 @@ public class BallerinaParserErrorHandler {
             case FUNC_DEFINITION:
                 return ParserRuleContext.FUNCTION_KEYWORD;
             case FUNC_SIGNATURE:
-                return ParserRuleContext.OPEN_PARANTHESIS;
+                return ParserRuleContext.OPEN_PARENTHESIS;
             case RETURN_TYPE_DESCRIPTOR:
                 return ParserRuleContext.RETURNS_KEYWORD;
             case EXTERNAL_FUNC_BODY:
@@ -702,7 +702,7 @@ public class BallerinaParserErrorHandler {
                 } else {
                     throw new IllegalStateException();
                 }
-            case CLOSE_PARANTHESIS:
+            case CLOSE_PARENTHESIS:
                 popContext(); // end func signature
                 return ParserRuleContext.FUNC_BODY;
             case EXPRESSION:
@@ -734,7 +734,7 @@ public class BallerinaParserErrorHandler {
             // }
 
             // return ParserRuleContext.STATEMENT;
-            case OPEN_PARANTHESIS:
+            case OPEN_PARENTHESIS:
                 return ParserRuleContext.PARAM_LIST;
             case PARAM_LIST:
                 return ParserRuleContext.PARAMETER;
@@ -783,10 +783,10 @@ public class BallerinaParserErrorHandler {
             case FUNC_BODY:
                 return ParserRuleContext.TOP_LEVEL_NODE;
             case PARAMETER:
-                return ParserRuleContext.CLOSE_PARANTHESIS;
+                return ParserRuleContext.CLOSE_PARENTHESIS;
             case ASSIGNMENT_STMT:
                 return ParserRuleContext.VARIABLE_NAME;
-            case VAR_DEF_STMT:
+            case VAR_DECL_STMT:
                 return ParserRuleContext.TYPE_DESCRIPTOR;
             case BINARY_EXPR_RHS:
                 return ParserRuleContext.BINARY_OPERATOR;
@@ -805,7 +805,7 @@ public class BallerinaParserErrorHandler {
      * @return <code>true</code> if the given context is a statement. <code>false</code> otherwise
      */
     private boolean isStatement(ParserRuleContext parentCtx) {
-        return parentCtx == ParserRuleContext.STATEMENT || parentCtx == ParserRuleContext.VAR_DEF_STMT ||
+        return parentCtx == ParserRuleContext.STATEMENT || parentCtx == ParserRuleContext.VAR_DECL_STMT ||
                 parentCtx == ParserRuleContext.ASSIGNMENT_STMT;
     }
 

@@ -33,13 +33,13 @@ public enum ParserRuleContext {
     FUNC_BODY_BLOCK("func-body-block"),
     RETURN_TYPE_DESCRIPTOR("return-type-desc"),
     ASSIGNMENT_STMT("assignment-stmt"),
-    VAR_DEF_STMT("var-def-stmt"),
+    VAR_DECL_STMT("var-decl-stmt"),
 
     // terminals
     FUNCTION_KEYWORD("function"),
     FUNC_NAME("function-name"),
-    OPEN_PARANTHESIS("("),
-    CLOSE_PARANTHESIS(")"),
+    OPEN_PARENTHESIS("("),
+    CLOSE_PARENTHESIS(")"),
     RETURNS_KEYWORD("returns"),
     TYPE_DESCRIPTOR("type"),
     OPEN_BRACE("{"),

@@ -50,10 +50,10 @@ public class BallerinaParserErrorHandlerV1 {
             case FUNC_NAME:
                 recoverFunctionName(nextToken);
                 break;
-            case OPEN_PARANTHESIS:
+            case OPEN_PARENTHESIS:
                 recoverLeftParanthesis(nextToken);
                 break;
-            case CLOSE_PARANTHESIS:
+            case CLOSE_PARENTHESIS:
                 recoverRightParanthesis(nextToken);
                 break;
             case PARAMETER:
@@ -224,14 +224,14 @@ public class BallerinaParserErrorHandlerV1 {
     }
 
     private void recoverLeftParanthesis(Token nextToken) {
-        if (prune(nextToken, ParserRuleContext.OPEN_PARANTHESIS)) {
+        if (prune(nextToken, ParserRuleContext.OPEN_PARENTHESIS)) {
             return;
         }
         reportMissingTokenError("(");
     }
 
     private void recoverRightParanthesis(Token nextToken) {
-        if (prune(nextToken, ParserRuleContext.CLOSE_PARANTHESIS)) {
+        if (prune(nextToken, ParserRuleContext.CLOSE_PARENTHESIS)) {
             return;
         }
         reportMissingTokenError(")");
@@ -355,8 +355,8 @@ public class BallerinaParserErrorHandlerV1 {
     private boolean hasMatchInFunction(Token nextToken, ParserRuleContext currentContext) {
         ParserRuleContext nextContext;
         switch (currentContext) {
-            case OPEN_PARANTHESIS:
-                if (nextToken.kind == TokenKind.OPEN_PARANTHESIS) {
+            case OPEN_PARENTHESIS:
+                if (nextToken.kind == TokenKind.OPEN_PARENTHESIS) {
                     return true;
                 }
 
@@ -367,10 +367,10 @@ public class BallerinaParserErrorHandlerV1 {
                 nextContext = ParserRuleContext.PARAMETER;
             case PARAMETER:
                 // TODO: if match, return the context
-                nextContext = ParserRuleContext.CLOSE_PARANTHESIS;
+                nextContext = ParserRuleContext.CLOSE_PARENTHESIS;
                 break;
-            case CLOSE_PARANTHESIS:
-                if (nextToken.kind == TokenKind.CLOSE_PARANTHESIS) {
+            case CLOSE_PARENTHESIS:
+                if (nextToken.kind == TokenKind.CLOSE_PARENTHESIS) {
                     return true;
                 }
                 nextContext = ParserRuleContext.RETURNS_KEYWORD;
@@ -425,7 +425,7 @@ public class BallerinaParserErrorHandlerV1 {
                 if (nextToken.kind == TokenKind.IDENTIFIER) {
                     return true;
                 }
-                nextContext = ParserRuleContext.OPEN_PARANTHESIS;
+                nextContext = ParserRuleContext.OPEN_PARENTHESIS;
                 break;
             case TOP_LEVEL_NODE:
             case FUNC_DEFINITION:

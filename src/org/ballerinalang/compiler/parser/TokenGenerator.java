@@ -68,11 +68,11 @@ public class TokenGenerator {
     }
 
     public Token getLeftParanthesis() {
-        return newToken("(", TokenKind.OPEN_PARANTHESIS);
+        return newToken("(", TokenKind.OPEN_PARENTHESIS);
     }
 
     public Token getRigthtParanthesis() {
-        return newToken(")", TokenKind.CLOSE_PARANTHESIS);
+        return newToken(")", TokenKind.CLOSE_PARENTHESIS);
     }
 
     public Token getLeftBrace() {

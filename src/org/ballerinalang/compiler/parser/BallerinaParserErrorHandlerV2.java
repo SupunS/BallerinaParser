@@ -281,8 +281,8 @@ public class BallerinaParserErrorHandlerV2 {
             }
 
             switch (context) {
-                case OPEN_PARANTHESIS:
-                    if (nextToken.kind != TokenKind.OPEN_PARANTHESIS) {
+                case OPEN_PARENTHESIS:
+                    if (nextToken.kind != TokenKind.OPEN_PARENTHESIS) {
                         isMismatch = true;
                         break;
                     }
@@ -295,10 +295,10 @@ public class BallerinaParserErrorHandlerV2 {
                 case PARAMETER:
                     // TODO: if match, return the context
                     k--; // stay at the same place
-                    context = ParserRuleContext.CLOSE_PARANTHESIS;
+                    context = ParserRuleContext.CLOSE_PARENTHESIS;
                     break;
-                case CLOSE_PARANTHESIS:
-                    if (nextToken.kind != TokenKind.CLOSE_PARANTHESIS) {
+                case CLOSE_PARENTHESIS:
+                    if (nextToken.kind != TokenKind.CLOSE_PARENTHESIS) {
                         isMismatch = true;
                         break;
                     }
@@ -382,7 +382,7 @@ public class BallerinaParserErrorHandlerV2 {
                         isMismatch = true;
                         break;
                     }
-                    context = ParserRuleContext.OPEN_PARANTHESIS;
+                    context = ParserRuleContext.OPEN_PARENTHESIS;
                     break;
                 case TOP_LEVEL_NODE:
                 case FUNC_DEFINITION:
