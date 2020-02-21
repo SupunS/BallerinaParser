@@ -26,6 +26,7 @@ public enum ParserRuleContext {
     STATEMENT("statement"),
     PARAM_LIST("parameters"),
     PARAMETER("parameter"),
+    FOLLOW_UP_PARAM("follow-up-param"),
     ANNOTATION_ATTACHMENT("annotation"),
     FUNC_BODY("func-body"),
     FUNC_SIGNATURE("func-signature"),
@@ -49,6 +50,7 @@ public enum ParserRuleContext {
     EXTERNAL_KEYWORD("external"), 
     VARIABLE_NAME("variable"),
     BINARY_OPERATOR("binary-operator"),
+    COMMA(","),
 
     // expressions
     EXPRESSION("expression"),

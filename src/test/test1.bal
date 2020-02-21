@@ -87,3 +87,12 @@ public function lll() {
     x = a + b < c - d /  e;
 }
 
+public function foo(int a, int b = 7, int c, string... d) {
+}
+
+public function foo(int, int b  7,  c, ... d) {
+}
+
+
+public function foo int, int b  7,  c, ... d {
+}

@@ -40,6 +40,7 @@ public enum TokenKind {
     CLOSE_BRACE,
     OPEN_BRACKET,
     CLOSE_BRACKET,
+    ELLIPSIS,
 
     // Trivia
     WHITE_SPACE,

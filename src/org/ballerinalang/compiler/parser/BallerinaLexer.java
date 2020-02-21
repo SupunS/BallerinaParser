@@ -69,7 +69,7 @@ public class BallerinaLexer {
                 token = this.tokenGenerator.getSemicolon();
                 break;
             case LexerTerminals.DOT:
-                token = this.tokenGenerator.getDot();
+                token = parseDotOrEllipsis();
                 break;
             case LexerTerminals.COMMA:
                 token = this.tokenGenerator.getComma();
@@ -155,6 +155,19 @@ public class BallerinaLexer {
         }
 
         return token;
+    }
+
+    /**
+     * @return
+     */
+    private Token parseDotOrEllipsis() {
+        if (peek(1) == LexerTerminals.DOT && peek(2) == LexerTerminals.DOT) {
+            consume();
+            consume();
+            return this.tokenGenerator.getEllipsis();
+        }
+
+        return this.tokenGenerator.getDot();
     }
 
     /**
@@ -495,6 +508,21 @@ public class BallerinaLexer {
     }
 
     /**
+     * Returns the next k-th character from the reader, without consuming the stream.
+     * 
+     * @return Next k-th character
+     */
+    private int peek(int k) {
+        try {
+            return this.reader.peek(k);
+        } catch (IOException e) {
+            // FIXME
+            e.printStackTrace();
+            throw new IllegalStateException();
+        }
+    }
+
+    /**
      * Append a given character to the currently processing token.
      * 
      * @param c Character to append
@@ -528,10 +556,11 @@ public class BallerinaLexer {
      * @since 1.2.0
      */
     private static class InputReader {
+        private static final int BUFFER_SIZE = 10;
+        private CharacterBuffer charsAhead = new CharacterBuffer(BUFFER_SIZE);
 
         private Reader reader;
-        private int nextChar;
-        private boolean peeked = false;
+        private int currentChar;
 
         InputReader(InputStream inputStream) {
             // Wrapping with a buffered reader for efficiency.
@@ -549,11 +578,15 @@ public class BallerinaLexer {
          * @throws IOException
          */
         public int read() throws IOException {
-            if (this.peeked) {
-                this.peeked = false;
-                return this.nextChar;
+            if (this.charsAhead.size > 0) {
+                // cache the head
+                this.currentChar = charsAhead.consume();
+                return this.currentChar;
             }
-            return this.reader.read();
+
+            // cache the head
+            this.currentChar = this.reader.read();
+            return this.currentChar;
         }
 
         /**
@@ -564,11 +597,80 @@ public class BallerinaLexer {
          * @throws IOException
          */
         public int peek() throws IOException {
-            if (!this.peeked) {
-                this.nextChar = this.reader.read();
-                this.peeked = true;
+            if (this.charsAhead.size == 0) {
+                this.charsAhead.add(this.reader.read());
             }
-            return this.nextChar;
+            return this.charsAhead.peek();
+        }
+
+        public int peek(int k) throws IOException {
+            while (this.charsAhead.size < k) {
+                this.charsAhead.add(this.reader.read());
+            }
+
+            return this.charsAhead.peek(k);
+        }
+    }
+
+    private static class CharacterBuffer {
+
+        private final int capacity;
+        private final int[] chars;
+        private int endIndex = -1;
+        private int startIndex = -1;
+        private int size = 0;
+
+        CharacterBuffer(int size) {
+            this.capacity = size;
+            this.chars = new int[size];
+        }
+
+        public void add(int token) {
+            if (this.size == this.capacity) {
+                throw new IndexOutOfBoundsException("buffer overflow");
+            }
+
+            if (this.endIndex == this.capacity - 1) {
+                this.endIndex = 0;
+            } else {
+                this.endIndex++;
+            }
+
+            if (this.size == 0) {
+                this.startIndex = this.endIndex;
+            }
+
+            this.chars[this.endIndex] = token;
+            this.size++;
+        }
+
+        public int consume() {
+            int token = this.chars[this.startIndex];
+            this.size--;
+            if (this.startIndex == this.capacity - 1) {
+                this.startIndex = 0;
+            } else {
+                this.startIndex++;
+            }
+
+            return token;
+        }
+
+        public int peek() {
+            return this.chars[this.startIndex];
+        }
+
+        public int peek(int k) {
+            if (k > this.size) {
+                throw new IndexOutOfBoundsException("size: " + this.size + ", index: " + k);
+            }
+
+            int index = this.startIndex + k - 1;
+            if (index >= this.capacity) {
+                index = index - this.capacity;
+            }
+
+            return this.chars[index];
         }
     }
 }

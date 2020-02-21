@@ -20,18 +20,21 @@ package org.ballerinalang.compiler.parser;
 import org.ballerinalang.compiler.parser.tree.ASTNode;
 import org.ballerinalang.compiler.parser.tree.AssignmentStmtNode;
 import org.ballerinalang.compiler.parser.tree.BinaryExpressionNode;
-import org.ballerinalang.compiler.parser.tree.EmptyNode;
-import org.ballerinalang.compiler.parser.tree.InvalidNode;
-import org.ballerinalang.compiler.parser.tree.LiteralNode;
-import org.ballerinalang.compiler.parser.tree.ExternFuncBodyNode;
 import org.ballerinalang.compiler.parser.tree.BlockNode;
 import org.ballerinalang.compiler.parser.tree.BracedExpressionNode;
+import org.ballerinalang.compiler.parser.tree.DefaultableParameterNode;
+import org.ballerinalang.compiler.parser.tree.EmptyNode;
+import org.ballerinalang.compiler.parser.tree.ExternFuncBodyNode;
 import org.ballerinalang.compiler.parser.tree.FunctionNode;
 import org.ballerinalang.compiler.parser.tree.IdentifierNode;
+import org.ballerinalang.compiler.parser.tree.InvalidNode;
+import org.ballerinalang.compiler.parser.tree.LiteralNode;
 import org.ballerinalang.compiler.parser.tree.MissingNode;
 import org.ballerinalang.compiler.parser.tree.ModifierNode;
 import org.ballerinalang.compiler.parser.tree.OperatorNode;
+import org.ballerinalang.compiler.parser.tree.ParameterNode;
 import org.ballerinalang.compiler.parser.tree.ParametersNode;
+import org.ballerinalang.compiler.parser.tree.RestParameterNode;
 import org.ballerinalang.compiler.parser.tree.ReturnTypeDescNode;
 import org.ballerinalang.compiler.parser.tree.SyntaxNode;
 import org.ballerinalang.compiler.parser.tree.TypeNode;
@@ -48,6 +51,9 @@ public class BallerinaParserListener {
 
     // TODO: make this a stack of lists (nested modifiers are possible)
     private List<ASTNode> modifiersList = new ArrayList<>(2);
+
+    // TODO: make this a stack of lists
+    private List<ASTNode> parameters = new ArrayList<>();
 
     public void exitCompUnit() {
         System.out.println("--------------------------------------");
@@ -81,12 +87,10 @@ public class BallerinaParserListener {
         // do nothing
     }
 
-    public void exitParamList(int paramCount) {
+    public void exitParamList() {
         ParametersNode params = new ParametersNode();
-        for (int i = 0; i < paramCount; i++) {
-            params.add(this.nodesStack.pop());
-        }
-
+        params.parameters = this.parameters;
+        this.parameters = new ArrayList<>();
         this.nodesStack.push(params);
     }
 
@@ -146,7 +150,31 @@ public class BallerinaParserListener {
         this.nodesStack.push(new InvalidNode(content));
     }
 
-    public void exitParameter() {
+    public void exitRequiredParameter() {
+        ParameterNode param = new ParameterNode();
+        param.varName = this.nodesStack.pop();
+        param.type = this.nodesStack.pop();
+        param.comma = this.nodesStack.pop();
+        parameters.add(param);
+    }
+
+    public void exitDefaultableParameter() {
+        DefaultableParameterNode param = new DefaultableParameterNode();
+        param.expr = this.nodesStack.pop();
+        param.assign = this.nodesStack.pop();
+        param.varName = this.nodesStack.pop();
+        param.type = this.nodesStack.pop();
+        param.comma = this.nodesStack.pop();
+        parameters.add(param);
+    }
+
+    public void exitRestParameter() {
+        RestParameterNode param = new RestParameterNode();
+        param.varName = this.nodesStack.pop();
+        param.ellipsis = this.nodesStack.pop();
+        param.type = this.nodesStack.pop();
+        param.comma = this.nodesStack.pop();
+        parameters.add(param);
     }
 
     public void addEmptyNode() {

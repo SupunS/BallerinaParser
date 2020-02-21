@@ -17,27 +17,19 @@
  */
 package org.ballerinalang.compiler.parser.tree;
 
-import java.util.ArrayList;
-import java.util.List;
+public class ParameterNode extends ASTNode {
 
-public class ParametersNode extends ASTNode {
+    public ASTNode type;
+    public ASTNode varName;
+    public ASTNode comma;
 
-    public List<ASTNode> parameters = new ArrayList<>();
-
-    public ParametersNode() {
-        this.kind = NodeKind.PARAMETERS;
-    }
-
-    public void add(ASTNode param) {
-        this.parameters.add(param);
+    public ParameterNode() {
+        this.kind = NodeKind.PARAMETER;
     }
 
     @Override
     public String toString() {
-        StringBuilder sb = new StringBuilder();
-        for (ASTNode param : this.parameters) {
-            sb.append(param.toString());
-        }
-        return sb.toString();
+        String val = this.comma + " " + this.type + " " + this.varName;
+        return val;
     }
 }

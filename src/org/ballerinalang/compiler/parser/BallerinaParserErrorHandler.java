@@ -257,7 +257,7 @@ public class BallerinaParserErrorHandler {
     }
 
     /**
-     * TODO: This is a duplicate method. Same as {@link BallerinaParser#isEndOfBlock}.
+     * TODO: This is a duplicate method. Same as {@link BallerinaParser#isEndOfExpression}.
      * 
      * @param token
      * @return
@@ -272,6 +272,39 @@ public class BallerinaParserErrorHandler {
             case EOF:
             case SEMICOLON:
             case COMMA:
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    private boolean isEndOfParametersList(Token token) {
+        switch (token.kind) {
+            case CLOSE_BRACE:
+            case CLOSE_PARENTHESIS:
+            case CLOSE_BRACKET:
+            case SEMICOLON:
+            case PUBLIC:
+            case FUNCTION:
+            case EOF:
+            case RETURNS:
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    private boolean isEndOfParameter(Token token) {
+        switch (token.kind) {
+            case CLOSE_BRACE:
+            case CLOSE_PARENTHESIS:
+            case CLOSE_BRACKET:
+            case SEMICOLON:
+            case COMMA:
+            case PUBLIC:
+            case FUNCTION:
+            case EOF:
+            case RETURNS:
                 return true;
             default:
                 return false;
@@ -488,7 +521,14 @@ public class BallerinaParserErrorHandler {
             if (isEndOfExpression(nextToken)) {
                 // Here we assume the end of an expression is always a semicolon
                 // TODO: add other types of expression-end
-                nextContext = ParserRuleContext.SEMICOLON;
+                ParserRuleContext parentCtx = getParentContext();
+                if (parentCtx == ParserRuleContext.PARAMETER) {
+                    nextContext = ParserRuleContext.COMMA;
+                } else if (isStatement(parentCtx)) {
+                    nextContext = ParserRuleContext.SEMICOLON;
+                } else {
+                    throw new IllegalStateException();
+                }
             } else {
                 nextContext = ParserRuleContext.BINARY_EXPR_RHS;
             }
@@ -657,6 +697,7 @@ public class BallerinaParserErrorHandler {
             case STATEMENT:
             case VAR_DECL_STMT:
             case ASSIGNMENT_STMT:
+            case PARAMETER:
                 // case EXPRESSION:
                 pushContext(currentCtx);
             default:
@@ -689,7 +730,7 @@ public class BallerinaParserErrorHandler {
                 parentCtx = getParentContext();
                 if (parentCtx == ParserRuleContext.EXTERNAL_FUNC_BODY) {
                     return ParserRuleContext.EXTERNAL_KEYWORD;
-                } else if (isStatement(parentCtx)) {
+                } else if (isStatement(parentCtx) || parentCtx == ParserRuleContext.PARAMETER) {
                     return ParserRuleContext.EXPRESSION;
                 } else {
                     throw new IllegalStateException();
@@ -708,13 +749,17 @@ public class BallerinaParserErrorHandler {
             case EXPRESSION:
                 nextToken = this.tokenReader.peek(nextLookahead);
                 if (isEndOfExpression(nextToken)) {
-                    // Here we assume the end of an expression is always a semicolon
-                    // TODO: add other types of expression-end
-                    return ParserRuleContext.SEMICOLON;
+                    parentCtx = getParentContext();
+                    if (parentCtx == ParserRuleContext.PARAMETER) {
+                        return ParserRuleContext.COMMA;
+                    } else if (isStatement(parentCtx)) {
+                        return ParserRuleContext.SEMICOLON;
+                    } else {
+                        throw new IllegalStateException();
+                    }
                 } else {
                     return ParserRuleContext.BINARY_EXPR_RHS;
                 }
-
             case EXTERNAL_KEYWORD:
                 return ParserRuleContext.SEMICOLON;
             case FUNCTION_KEYWORD:
@@ -737,6 +782,10 @@ public class BallerinaParserErrorHandler {
             case OPEN_PARENTHESIS:
                 return ParserRuleContext.PARAM_LIST;
             case PARAM_LIST:
+                nextToken = this.tokenReader.peek(nextLookahead);
+                if (isEndOfParametersList(nextToken)) {
+                    return ParserRuleContext.CLOSE_PARENTHESIS;
+                }
                 return ParserRuleContext.PARAMETER;
             case RETURNS_KEYWORD:
                 if (this.tokenReader.peek(nextLookahead).kind != TokenKind.RETURNS) {
@@ -769,7 +818,7 @@ public class BallerinaParserErrorHandler {
                 }
             case TYPE_DESCRIPTOR:
                 parentCtx = getParentContext();
-                if (isStatement(parentCtx)) {
+                if (isStatement(parentCtx) || parentCtx == ParserRuleContext.PARAMETER) {
                     return ParserRuleContext.VARIABLE_NAME;
                 } else if (parentCtx == ParserRuleContext.RETURN_TYPE_DESCRIPTOR) {
                     return ParserRuleContext.FUNC_BODY;
@@ -777,13 +826,35 @@ public class BallerinaParserErrorHandler {
                     throw new IllegalStateException();
                 }
             case VARIABLE_NAME:
-                return ParserRuleContext.ASSIGN_OP;
+                nextToken = this.tokenReader.peek(nextLookahead);
+                parentCtx = getParentContext();
+                if (parentCtx == ParserRuleContext.PARAMETER) {
+                    if (isEndOfParametersList(nextToken)) {
+                        return ParserRuleContext.CLOSE_PARENTHESIS;
+                    } else if (isEndOfParameter(nextToken)) {
+                        return ParserRuleContext.COMMA;
+                    } else {
+                        return ParserRuleContext.ASSIGN_OP;
+                    }
+                } else if (isStatement(parentCtx)) {
+                    if (isEndOfExpression(nextToken)) { // end of expression can be treated as end of a statement too
+                        return ParserRuleContext.SEMICOLON;
+                    } else {
+                        return ParserRuleContext.ASSIGN_OP;
+                    }
+                } else {
+                    throw new IllegalStateException();
+                }
             case TOP_LEVEL_NODE:
                 return ParserRuleContext.FUNC_DEFINITION;
             case FUNC_BODY:
                 return ParserRuleContext.TOP_LEVEL_NODE;
             case PARAMETER:
-                return ParserRuleContext.CLOSE_PARENTHESIS;
+                nextToken = this.tokenReader.peek(nextLookahead);
+                if (isEndOfParametersList(nextToken)) {
+                    return ParserRuleContext.CLOSE_PARENTHESIS;
+                }
+                return ParserRuleContext.TYPE_DESCRIPTOR;
             case ASSIGNMENT_STMT:
                 return ParserRuleContext.VARIABLE_NAME;
             case VAR_DECL_STMT:
@@ -792,6 +863,15 @@ public class BallerinaParserErrorHandler {
                 return ParserRuleContext.BINARY_OPERATOR;
             case BINARY_OPERATOR:
                 return ParserRuleContext.EXPRESSION;
+            case COMMA:
+                parentCtx = getParentContext();
+                if (parentCtx == ParserRuleContext.PARAMETER) {
+                    return ParserRuleContext.PARAMETER;
+                }
+
+                throw new IllegalStateException();
+            case FOLLOW_UP_PARAM:
+                return ParserRuleContext.COMMA;
             case ANNOTATION_ATTACHMENT:
             default:
                 throw new IllegalStateException("cannot find the next rule for: " + currentCtx);

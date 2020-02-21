@@ -60,11 +60,11 @@ public class TokenGenerator {
     }
 
     public Token getDot() {
-        return newToken(":", TokenKind.DOT);
+        return newToken(".", TokenKind.DOT);
     }
 
     public Token getComma() {
-        return newToken(":", TokenKind.COMMA);
+        return newToken(",", TokenKind.COMMA);
     }
 
     public Token getLeftParanthesis() {
@@ -165,5 +165,12 @@ public class TokenGenerator {
 
     public Token getComment(String text) {
         return newToken(text, TokenKind.COMMENT);
+    }
+
+    /**
+     * @return
+     */
+    public Token getEllipsis() {
+        return newToken("...", TokenKind.ELLIPSIS);
     }
 }

@@ -79,7 +79,7 @@ public class BallerinaParser {
                 parseOpenParenthesis();
                 break;
             case PARAMETER:
-                // TODO
+                parseParameter();
                 break;
             case PARAM_LIST:
                 parseParamList();
@@ -124,6 +124,8 @@ public class BallerinaParser {
             case BINARY_EXPR_RHS:
                 parseBinaryExprRhs();
                 break;
+            case FOLLOW_UP_PARAM:
+                parseFollowUpParameter();
             case TOP_LEVEL_NODE:
             default:
                 throw new IllegalStateException("Cannot re-parse rule:" + context);
@@ -269,19 +271,166 @@ public class BallerinaParser {
     }
 
     /**
+     * <p>
      * Parse parameter list.
+     * </p>
+     * <code>
+     * param-list := required-params [, defaultable-params] [, rest-param]
+     *     <br/>&nbsp;| defaultable-params [, rest-param]
+     *     <br/>&nbsp;| [rest-param]
+     * <br/><br/>
+     * required-params := required-param (, required-param)*
+     * <br/><br/>
+     * required-param := [annots] [public] type-descriptor [param-name]
+     * <br/><br/>
+     * defaultable-params := defaultable-param (, defaultable-param)*
+     * <br/><br/>
+     * defaultable-param := [annots] [public] type-descriptor [param-name] default-value
+     * <br/><br/>
+     * rest-param := [annots] type-descriptor ... [param-name]
+     * <br/><br/>
+     * param-name := identifier
+     * </code>
      */
     private void parseParamList() {
         switchContext(ParserRuleContext.PARAM_LIST);
-        boolean b = false;
-        int paramCount = 0;
-        while (b) {
-            this.listner.exitParameter();
-            paramCount++;
+
+        Token token = peek();
+        if (!isEndOfParametersList(token)) {
+            // comma precedes the first parameter, which doesn't exist
+            this.listner.addEmptyNode();
+            parseParameters();
         }
 
-        this.listner.exitParamList(paramCount);
+        this.listner.exitParamList();
         revertContext();
+    }
+
+    /**
+     * Parse parameters, separated by commas.
+     */
+    private void parseParameters() {
+        parseParameter();
+
+        Token token = peek();
+        if (isEndOfParametersList(token)) {
+            return;
+        }
+
+        parseFollowUpParameter();
+    }
+
+    /**
+     * Parse a single parameter. Parameter can be a required parameter, a defaultable
+     * parameter, or a rest parameter.
+     */
+    private void parseParameter() {
+        switchContext(ParserRuleContext.PARAMETER);
+        Token token = peek();
+
+        if (token.kind == TokenKind.PUBLIC) {
+            parseModifier();
+        }
+
+        parseTypeDescriptor();
+
+        // Rest Parameter
+        token = peek();
+        if (token.kind == TokenKind.ELLIPSIS) {
+            this.listner.exitSyntaxNode(consume());
+            parseVariableName();
+            this.listner.exitRestParameter();
+            revertContext();
+            return;
+        }
+
+        parseVariableName();
+
+        // Required parameters
+        token = peek();
+        if (isEndOfParameter(token)) {
+            this.listner.exitRequiredParameter();
+            revertContext();
+            return;
+        }
+
+        // Defaultable parameters
+        parseAssignOp();
+        parseExpression();
+        this.listner.exitDefaultableParameter();
+        revertContext();
+    }
+
+    /**
+     * Parse a parameter that follows another parameter.
+     */
+    private void parseFollowUpParameter() {
+        Token token = peek();
+        if (token.kind == TokenKind.COMMA) {
+            parseComma();
+        } else {
+            Action action = recover(token, ParserRuleContext.FOLLOW_UP_PARAM);
+
+            // If the current rule was recovered by removing a token,
+            // then this entire rule is already parsed while recovering.
+            // so we done need to parse the remaining of this rule again.
+            // Proceed only if the recovery action was an insertion.
+            if (action == Action.REMOVE) {
+                return;
+            }
+        }
+
+        parseParameters();
+    }
+
+    /**
+     * Parse comma.
+     */
+    private void parseComma() {
+        Token token = peek();
+        if (token.kind == TokenKind.COMMA) {
+            this.listner.exitSyntaxNode(consume()); // parse ","
+        } else {
+            recover(token, ParserRuleContext.COMMA);
+        }
+    }
+
+    /**
+     * @param token
+     * @return
+     */
+    private boolean isEndOfParameter(Token token) {
+        switch (token.kind) {
+            case CLOSE_BRACE:
+            case CLOSE_PARENTHESIS:
+            case CLOSE_BRACKET:
+            case SEMICOLON:
+            case COMMA:
+            case PUBLIC:
+            case FUNCTION:
+            case EOF:
+            case RETURNS:
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    private boolean isEndOfParametersList(Token token) {
+        switch (token.kind) {
+            case CLOSE_BRACE:
+            case CLOSE_PARENTHESIS:
+            case CLOSE_BRACKET:
+            case OPEN_BRACE:
+            case SEMICOLON:
+            case PUBLIC:
+            case FUNCTION:
+            case EOF:
+            case RETURNS:
+                return true;
+            default:
+                return false;
+        }
     }
 
     /**
@@ -315,17 +464,17 @@ public class BallerinaParser {
      * Parse a type descriptor. A type descriptor has the following structure.
      * </p>
      * <code>type-descriptor :=
-     *      &nbsp;simple-type-descriptor</br>
-     *      &nbsp;| structured-type-descriptor</br>
-     *      &nbsp;| behavioral-type-descriptor</br>
-     *      &nbsp;| singleton-type-descriptor</br>
-     *      &nbsp;| union-type-descriptor</br>
-     *      &nbsp;| optional-type-descriptor</br>
-     *      &nbsp;| any-type-descriptor</br>
-     *      &nbsp;| anydata-type-descriptor</br>
-     *      &nbsp;| byte-type-descriptor</br>
-     *      &nbsp;| json-type-descriptor</br>
-     *      &nbsp;| type-descriptor-reference</br>
+     *      &nbsp;simple-type-descriptor<br/>
+     *      &nbsp;| structured-type-descriptor<br/>
+     *      &nbsp;| behavioral-type-descriptor<br/>
+     *      &nbsp;| singleton-type-descriptor<br/>
+     *      &nbsp;| union-type-descriptor<br/>
+     *      &nbsp;| optional-type-descriptor<br/>
+     *      &nbsp;| any-type-descriptor<br/>
+     *      &nbsp;| anydata-type-descriptor<br/>
+     *      &nbsp;| byte-type-descriptor<br/>
+     *      &nbsp;| json-type-descriptor<br/>
+     *      &nbsp;| type-descriptor-reference<br/>
      *      &nbsp;| ( type-descriptor )
      * </br>    
      * type-descriptor-reference := qualified-identifier</code>
