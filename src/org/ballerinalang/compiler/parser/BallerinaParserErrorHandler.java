@@ -59,7 +59,14 @@ public class BallerinaParserErrorHandler {
             { ParserRuleContext.FUNC_BODY_BLOCK, ParserRuleContext.EXTERNAL_FUNC_BODY };
 
     private static final ParserRuleContext[] STATEMENTS =
-            { ParserRuleContext.ASSIGNMENT_STMT, ParserRuleContext.VAR_DECL_STMT };
+            { 
+                    ParserRuleContext.ASSIGNMENT_STMT,
+                    ParserRuleContext.VAR_DECL_STMT, 
+                    ParserRuleContext.CLOSE_BRACE // this marks an end of statement block
+            };
+
+    private static final ParserRuleContext[] VAR_DECL_RHS =
+            { ParserRuleContext.SEMICOLON, ParserRuleContext.ASSIGN_OP };
 
     /**
      * Limit for the distance to travel, to determine a successful lookahead.
@@ -101,7 +108,7 @@ public class BallerinaParserErrorHandler {
      * @param currentCtx Current parser context
      * @return The action needs to be taken for the next token, in order to recover
      */
-    public Action recover(ParserRuleContext currentCtx, Token nextToken) {
+    public Solution recover(ParserRuleContext currentCtx, Token nextToken) {
         // Assumption: always comes here after a peek()
 
         // Key key = new Key(nextToken, currentContext);
@@ -114,7 +121,7 @@ public class BallerinaParserErrorHandler {
         if (nextToken.kind == TokenKind.EOF) {
             reportMissingTokenError("missing " + currentCtx);
             this.listner.addMissingNode(currentCtx.toString());
-            return Action.INSERT;
+            return new Solution(Action.INSERT, currentCtx, getExpectedTokenKind(currentCtx), currentCtx.toString());
         }
 
         Result bestMatch = seekMatch(currentCtx);
@@ -127,12 +134,12 @@ public class BallerinaParserErrorHandler {
 
             Solution fix = bestMatch.fixes.pop();
             applyFix(currentCtx, fix);
-            return fix.action;
+            return fix;
         } else {
             // fail safe
             // this means we can't find a path to recover
             removeInvalidToken();
-            return Action.REMOVE;
+            return new Solution(Action.REMOVE, currentCtx, nextToken.kind, nextToken.text);
         }
 
     }
@@ -163,17 +170,14 @@ public class BallerinaParserErrorHandler {
             this.parser.parse(currentCtx);
         } else {
             if (isProductionWithAlternatives(currentCtx)) {
-                // If the original issues was at the production where there are alternatives,
-                // then try to re-parse the matched alternative without reporting errors.
-                // Errors will be reported at the next try.
-
-                // TODO: This will cause the parser to recover from the same issue twice.
-                // Fix this redundant operation.
-                this.parser.parse(fix.enclosingCtx);
-            } else {
-                reportMissingTokenError("missing " + fix.ctx);
-                this.listner.addMissingNode(fix.ctx.toString());
+                // If the original issues was at a production where there are alternatives,
+                // then do not report any errors. Parser will try to re-parse the best-matching
+                // alternative again. Errors will be reported at the next try.
+                return;
             }
+
+            reportMissingTokenError("missing " + fix.ctx);
+            this.listner.addMissingNode(fix.ctx.toString());
         }
     }
 
@@ -200,6 +204,7 @@ public class BallerinaParserErrorHandler {
         switch (currentCtx) {
             case STATEMENT:
             case FUNC_BODY:
+            case VAR_DECL_STMT_RHS:
                 return true;
             default:
                 return false;
@@ -406,6 +411,8 @@ public class BallerinaParserErrorHandler {
                     break;
                 case EXPRESSION:
                     return seekInExpression(currentCtx, lookahead, currentDepth, matchingRulesCount, fixes);
+                case VAR_DECL_STMT_RHS:
+                    return seekInAlternativesPaths(lookahead, currentDepth, matchingRulesCount, fixes, VAR_DECL_RHS);
 
                 // productions
                 case BINARY_EXPR_RHS:
@@ -475,7 +482,7 @@ public class BallerinaParserErrorHandler {
             // Semicolon at the start of a statement is a special case. This is equivalent to an empty
             // statement. So assume the fix for this is a REMOVE operation and continue from the next token.
             Result result = seekMatchInSubTree(ParserRuleContext.STATEMENT, lookahead + 1, currentDepth);
-            fixes.add(new Solution(Action.REMOVE, currentCtx, getParentContext(), nextToken.toString()));
+            fixes.add(new Solution(Action.REMOVE, currentCtx, nextToken.kind, nextToken.toString()));
             fixes.addAll(result.fixes);
             currentMatches += result.matches;
             return new Result(fixes, currentMatches);
@@ -658,18 +665,29 @@ public class BallerinaParserErrorHandler {
         ParserRuleContext nextCtx = getNextRule(currentCtx, lookahead);
         Result insertionResult = seekMatchInSubTree(nextCtx, lookahead, currentDepth);
 
-        // TODO: Add tie-break. i.e: "insertionResult.matches == deletionResult.matches" scenario.
-
         Result fixedPathResult;
         Solution action;
         if (insertionResult.matches == 0 && deletionResult.matches == 0) {
             fixedPathResult = insertionResult;
-        } else if (insertionResult.matches >= deletionResult.matches) {
-            action = new Solution(Action.INSERT, currentCtx, getParentContext(), currentCtx.toString());
+        } else if (insertionResult.matches == deletionResult.matches) {
+            if (insertionResult.fixes.size() <= deletionResult.fixes.size()) {
+                action = new Solution(Action.INSERT, currentCtx, getExpectedTokenKind(currentCtx),
+                        currentCtx.toString());
+                insertionResult.fixes.push(action);
+                fixedPathResult = insertionResult;
+            } else {
+                Token token = this.tokenReader.peek(lookahead);
+                action = new Solution(Action.REMOVE, currentCtx, token.kind, token.text);
+                deletionResult.fixes.push(action);
+                fixedPathResult = deletionResult;
+            }
+        } else if (insertionResult.matches > deletionResult.matches) {
+            action = new Solution(Action.INSERT, currentCtx, getExpectedTokenKind(currentCtx), currentCtx.toString());
             insertionResult.fixes.push(action);
             fixedPathResult = insertionResult;
         } else {
-            action = new Solution(Action.REMOVE, currentCtx, getParentContext(), this.tokenReader.peek(lookahead).text);
+            Token token = this.tokenReader.peek(lookahead);
+            action = new Solution(Action.REMOVE, currentCtx, token.kind, token.text);
             deletionResult.fixes.push(action);
             fixedPathResult = deletionResult;
         }
@@ -685,7 +703,7 @@ public class BallerinaParserErrorHandler {
      */
     private ParserRuleContext getNextRule(ParserRuleContext currentCtx, int nextLookahead) {
         // If this is a production, then push the context to the stack.
-        // We can do this within the same switch-case that follows afters this one.
+        // We can do this within the same switch-case that follows after this one.
         // But doing it separately for the sake of readability/maintainability.
         switch (currentCtx) {
             case COMP_UNIT:
@@ -771,14 +789,14 @@ public class BallerinaParserErrorHandler {
                 // within the function signature. Do not search within the function body.
                 // This is done to avoid the parser misinterpreting tokens in the signature
                 // as part of the body, and vice-versa.
-                return ParserRuleContext.CLOSE_BRACE;
+                // return ParserRuleContext.CLOSE_BRACE;
 
-            // TODO:
-            // if (isEndOfBlock(this.tokenReader.peek(nextLookahead))) {
-            // return ParserRuleContext.CLOSE_BRACE;
-            // }
+                // TODO:
+                if (isEndOfBlock(this.tokenReader.peek(nextLookahead))) {
+                    return ParserRuleContext.CLOSE_BRACE;
+                }
 
-            // return ParserRuleContext.STATEMENT;
+                return ParserRuleContext.STATEMENT;
             case OPEN_PARENTHESIS:
                 return ParserRuleContext.PARAM_LIST;
             case PARAM_LIST:
@@ -885,8 +903,14 @@ public class BallerinaParserErrorHandler {
      * @return <code>true</code> if the given context is a statement. <code>false</code> otherwise
      */
     private boolean isStatement(ParserRuleContext parentCtx) {
-        return parentCtx == ParserRuleContext.STATEMENT || parentCtx == ParserRuleContext.VAR_DECL_STMT ||
-                parentCtx == ParserRuleContext.ASSIGNMENT_STMT;
+        switch (parentCtx) {
+            case STATEMENT:
+            case VAR_DECL_STMT:
+            case ASSIGNMENT_STMT:
+                return true;
+            default:
+                return false;
+        }
     }
 
     /**
@@ -937,24 +961,89 @@ public class BallerinaParserErrorHandler {
     }
 
     /**
+     * Get the expected token kind at the given parser rule context. If the parser rule is a terminal,
+     * then the corresponding terminal token kind is returned. If the parser rule is a production,
+     * then {@link TokenKind#OTHER} is returned.
+     * 
+     * @param ctx Parser rule context
+     * @return Token kind expected at the given parser rule
+     */
+    private TokenKind getExpectedTokenKind(ParserRuleContext ctx) {
+        switch (ctx) {
+            case ASSIGN_OP:
+                return TokenKind.ASSIGN;
+            case BINARY_OPERATOR:
+                return TokenKind.ADD;
+            case CLOSE_BRACE:
+                return TokenKind.CLOSE_BRACE;
+            case CLOSE_PARENTHESIS:
+                return TokenKind.CLOSE_PARENTHESIS;
+            case COMMA:
+                return TokenKind.COMMA;
+            case EXTERNAL_KEYWORD:
+                return TokenKind.EXTERNAL;
+            case FOLLOW_UP_PARAM:
+                return TokenKind.COMMA;
+            case FUNCTION_KEYWORD:
+                return TokenKind.FUNCTION;
+            case FUNC_NAME:
+                return TokenKind.IDENTIFIER;
+            case OPEN_BRACE:
+                return TokenKind.OPEN_BRACE;
+            case OPEN_PARENTHESIS:
+                return TokenKind.OPEN_PARENTHESIS;
+
+            case RETURNS_KEYWORD:
+                return TokenKind.RETURNS;
+            case SEMICOLON:
+                return TokenKind.SEMICOLON;
+            case VARIABLE_NAME:
+                return TokenKind.IDENTIFIER;
+            case ANNOTATION_ATTACHMENT:
+            case ASSIGNMENT_STMT:
+            case BINARY_EXPR_RHS:
+            case COMP_UNIT:
+            case EXPRESSION:
+            case EXTERNAL_FUNC_BODY:
+            case FUNC_BODY:
+            case FUNC_BODY_BLOCK:
+            case FUNC_DEFINITION:
+            case FUNC_SIGNATURE:
+            case PARAMETER:
+            case PARAM_LIST:
+            case RETURN_TYPE_DESCRIPTOR:
+            case STATEMENT:
+            case TOP_LEVEL_NODE:
+            case TYPE_DESCRIPTOR:
+            case VAR_DECL_STMT:
+            case VAR_DECL_STMT_RHS:
+            case VAR_DECL_STMT_RHS_VALUE:
+            default:
+                break;
+        }
+
+        return TokenKind.OTHER;
+    }
+
+    /**
      * Represents a solution/fix for a parser error. A {@link Solution} consists of the parser context where the error
      * was encountered, the enclosing parser context, the token with the error, and the {@link Action} required to
      * recover.
      * 
      * @since 1.2.0
      */
-    private class Solution {
+    public class Solution {
 
         private ParserRuleContext ctx;
-        private ParserRuleContext enclosingCtx;
-        private Action action;
+        public Action action;
         private String token;
+        public TokenKind tokenKind;
 
-        public Solution(Action action, ParserRuleContext ctx, ParserRuleContext enclosingCtx, String token) {
+        public Solution(Action action, ParserRuleContext ctx, TokenKind tokenKind, String tokenText) {
             this.action = action;
             this.ctx = ctx;
-            this.token = token;
-            this.enclosingCtx = enclosingCtx;
+            this.token = tokenText;
+            this.tokenKind = tokenKind;
         }
 
         @Override

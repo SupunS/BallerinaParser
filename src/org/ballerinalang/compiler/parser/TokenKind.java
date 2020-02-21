@@ -20,6 +20,7 @@ package org.ballerinalang.compiler.parser;
 public enum TokenKind {
     EOF,    // end of file
     SOF,    // start of file
+    OTHER,
 
     // keywords
     PUBLIC,

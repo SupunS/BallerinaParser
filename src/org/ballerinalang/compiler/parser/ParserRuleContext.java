@@ -35,6 +35,8 @@ public enum ParserRuleContext {
     RETURN_TYPE_DESCRIPTOR("return-type-desc"),
     ASSIGNMENT_STMT("assignment-stmt"),
     VAR_DECL_STMT("var-decl-stmt"),
+    VAR_DECL_STMT_RHS("var-decl-rhs"),
+    VAR_DECL_STMT_RHS_VALUE("var-decl-rhs-value"),
 
     // terminals
     FUNCTION_KEYWORD("function"),

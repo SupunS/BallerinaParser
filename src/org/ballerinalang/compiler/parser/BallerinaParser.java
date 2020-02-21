@@ -18,6 +18,7 @@
 package org.ballerinalang.compiler.parser;
 
 import org.ballerinalang.compiler.parser.BallerinaParserErrorHandler.Action;
+import org.ballerinalang.compiler.parser.BallerinaParserErrorHandler.Solution;
 
 import java.io.InputStream;
 
@@ -126,6 +127,10 @@ public class BallerinaParser {
                 break;
             case FOLLOW_UP_PARAM:
                 parseFollowUpParameter();
+                break;
+            case VAR_DECL_STMT_RHS:
+                parseVarDeclRhs();
+                break;
             case TOP_LEVEL_NODE:
             default:
                 throw new IllegalStateException("Cannot re-parse rule:" + context);
@@ -145,7 +150,7 @@ public class BallerinaParser {
         return this.tokenReader.consumeNonTrivia();
     }
 
-    private Action recover(Token token, ParserRuleContext currentCtx) {
+    private Solution recover(Token token, ParserRuleContext currentCtx) {
         return this.errorHandler.recover(currentCtx, token);
     }
 
@@ -369,13 +374,13 @@ public class BallerinaParser {
         if (token.kind == TokenKind.COMMA) {
             parseComma();
         } else {
-            Action action = recover(token, ParserRuleContext.FOLLOW_UP_PARAM);
+            Solution solution = recover(token, ParserRuleContext.FOLLOW_UP_PARAM);
 
             // If the current rule was recovered by removing a token,
             // then this entire rule is already parsed while recovering.
             // so we done need to parse the remaining of this rule again.
             // Proceed only if the recovery action was an insertion.
-            if (action == Action.REMOVE) {
+            if (solution.action == Action.REMOVE) {
                 return;
             }
         }
@@ -510,7 +515,16 @@ public class BallerinaParser {
      */
     private void parseFunctionBody() {
         Token token = peek();
-        switch (token.kind) {
+        parseFunctionBody(token.kind);
+    }
+
+    /**
+     * Parse function body, given the next token kind.
+     * 
+     * @param tokenKind Next token kind
+     */
+    private void parseFunctionBody(TokenKind tokenKind) {
+        switch (tokenKind) {
             case ASSIGN:
                 parseExternalFunctionBody();
                 break;
@@ -518,7 +532,15 @@ public class BallerinaParser {
                 parseFunctionBodyBlock();
                 break;
             default:
-                recover(token, ParserRuleContext.FUNC_BODY);
+                Token token = peek();
+                Solution solution = recover(token, ParserRuleContext.FUNC_BODY);
+
+                // If the parser recovered by inserting a token, then try to re-parse the same
+                // rule with the inserted token token. This is done to pick the correct branch
+                // to continue the parsing.
+                if (solution.action == Action.INSERT) {
+                    parseFunctionBody(solution.tokenKind);
+                }
                 break;
         }
 
@@ -553,8 +575,8 @@ public class BallerinaParser {
      * @param token Token to check
      * @return <code>true</code> if the token represents an end of a block. <code>false</code> otherwise
      */
-    private boolean isEndOfBlock(Token token) {
-        switch (token.kind) {
+    private boolean isEndOfBlock(TokenKind tokenKind) {
+        switch (tokenKind) {
             case CLOSE_BRACE:
             case PUBLIC:
             case FUNCTION:
@@ -693,7 +715,7 @@ public class BallerinaParser {
     private void parseStatements() {
         // TODO: parse statements/worker declrs
         Token token = peek();
-        while (!isEndOfBlock(token)) {
+        while (!isEndOfBlock(token.kind)) {
             parseStatement();
             token = peek();
         }
@@ -704,7 +726,16 @@ public class BallerinaParser {
      */
     private void parseStatement() {
         Token token = peek();
-        switch (token.kind) {
+        parseStatement(token.kind);
+    }
+
+    /**
+     * Parse a single statement, given the next token kind.
+     * 
+     * @param tokenKind Next tokenKind
+     */
+    private void parseStatement(TokenKind tokenKind) {
+        switch (tokenKind) {
             case TYPE:
                 // TODO: add other statements that starts with a type
                 parseVariableDeclStmt();
@@ -715,8 +746,16 @@ public class BallerinaParser {
             default:
                 // If the next token in the token stream does not match to any of the statements and
                 // if it is not the end of statement, then try to fix it and continue.
-                if (!isEndOfBlock(token)) {
-                    recover(token, ParserRuleContext.STATEMENT);
+                if (!isEndOfBlock(tokenKind)) {
+                    Token token = peek();
+                    Solution solution = recover(token, ParserRuleContext.STATEMENT);
+
+                    // If the parser recovered by inserting a token, then try to re-parse the same
+                    // rule with the inserted token token. This is done to pick the correct branch
+                    // to continue the parsing.
+                    if (solution.action == Action.INSERT) {
+                        parseStatement(solution.tokenKind);
+                    }
                 }
                 break;
         }
@@ -737,22 +776,50 @@ public class BallerinaParser {
      */
     private void parseVariableDeclStmt() {
         switchContext(ParserRuleContext.VAR_DECL_STMT);
-
         parseTypeDescriptor();
         parseVariableName();
-
-        Token token = peek();
-        boolean hasExpr = false;
-        if (token.kind != TokenKind.SEMICOLON) {
-            parseAssignOp();
-            parseExpression();
-            hasExpr = true;
-        }
-
-        parseStatementEnd();
-        this.listner.exitVarDefStmt(hasExpr);
-
+        parseVarDeclRhs();
         revertContext();
+    }
+
+    /**
+     * Parse the right hand side of a variable declaration statement.
+     */
+    private void parseVarDeclRhs() {
+        Token token = peek();
+        parseVarDeclRhs(token.kind);
+    }
+
+    /**
+     * Parse the right hand side of a variable declaration statement, given the
+     * next token kind.
+     * 
+     * @param tokenKind Next token kind
+     */
+    private void parseVarDeclRhs(TokenKind tokenKind) {
+        switch (tokenKind) {
+            case ASSIGN:
+                parseAssignOp();
+                parseExpression();
+                parseStatementEnd();
+                this.listner.exitVarDefStmt(true);
+                break;
+            case SEMICOLON:
+                parseStatementEnd();
+                this.listner.exitVarDefStmt(false);
+                break;
+            default:
+                Token token = peek();
+                Solution solution = recover(token, ParserRuleContext.VAR_DECL_STMT_RHS);
+
+                // If the parser recovered by inserting a token, then try to re-parse the same
+                // rule with the inserted token token. This is done to pick the correct branch
+                // to continue the parsing.
+                if (solution.action == Action.INSERT) {
+                    parseVarDeclRhs(solution.tokenKind);
+                }
+                break;
+        }
     }
 
     /**
@@ -842,13 +909,13 @@ public class BallerinaParser {
         if (isBinaryOperator(token.kind)) {
             binaryOpKind = token.kind;
         } else {
-            Action action = recover(token, ParserRuleContext.BINARY_EXPR_RHS);
+            Solution solution = recover(token, ParserRuleContext.BINARY_EXPR_RHS);
 
             // If the current rule was recovered by removing a token,
             // then this entire rule is already parsed while recovering.
             // so we done need to parse the remaining of this rule again.
             // Proceed only if the recovery action was an insertion.
-            if (action == Action.REMOVE) {
+            if (solution.action == Action.REMOVE) {
                 return;
             }
 
