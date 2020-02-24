@@ -105,3 +105,11 @@ public function foo ()
 public function foo ) 
     int x = hello; 
 }
+
+public function foo(int a int b = 7, int c, string... d) {
+}
+
+public function foo(int a, int b = 7 8, int c, string... d) {
+    int x = 4
+    int y = 6;
+}

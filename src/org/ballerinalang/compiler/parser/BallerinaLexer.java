@@ -205,11 +205,11 @@ public class BallerinaLexer {
                     return this.tokenGenerator.getEqualOp();
                 }
             case LexerTerminals.GT:
-                // this is '==='
+                // this is '=>'
                 consume();
                 return this.tokenGenerator.getEqualGreaterOp();
             default:
-                // this is '=='
+                // this is '='
                 return this.tokenGenerator.getAssignOp();
         }
     }

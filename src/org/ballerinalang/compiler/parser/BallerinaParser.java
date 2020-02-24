@@ -131,6 +131,9 @@ public class BallerinaParser {
             case VAR_DECL_STMT_RHS:
                 parseVarDeclRhs();
                 break;
+            case PARAMETER_RHS:
+                parseParameterRhs();
+                break;
             case TOP_LEVEL_NODE:
             default:
                 throw new IllegalStateException("Cannot re-parse rule:" + context);
@@ -330,7 +333,6 @@ public class BallerinaParser {
      * parameter, or a rest parameter.
      */
     private void parseParameter() {
-        switchContext(ParserRuleContext.PARAMETER);
         Token token = peek();
 
         if (token.kind == TokenKind.PUBLIC) {
@@ -345,25 +347,39 @@ public class BallerinaParser {
             this.listner.exitSyntaxNode(consume());
             parseVariableName();
             this.listner.exitRestParameter();
-            revertContext();
             return;
         }
 
         parseVariableName();
+        parseParameterRhs();
+    }
 
+    private void parseParameterRhs() {
+        Token token = peek();
+        parseParameterRhs(token.kind);
+    }
+
+    private void parseParameterRhs(TokenKind tokenKind) {
         // Required parameters
-        token = peek();
-        if (isEndOfParameter(token)) {
+        if (isEndOfParameter(tokenKind)) {
             this.listner.exitRequiredParameter();
-            revertContext();
             return;
-        }
+        } else if (tokenKind == TokenKind.ASSIGN) {
+            // Defaultable parameters
+            parseAssignOp();
+            parseExpression();
+            this.listner.exitDefaultableParameter();
+        } else {
+            Token token = peek();
+            Solution solution = recover(token, ParserRuleContext.PARAMETER_RHS);
 
-        // Defaultable parameters
-        parseAssignOp();
-        parseExpression();
-        this.listner.exitDefaultableParameter();
-        revertContext();
+            // If the parser recovered by inserting a token, then try to re-parse the same
+            // rule with the inserted token token. This is done to pick the correct branch
+            // to continue the parsing.
+            if (solution.action == Action.INSERT) {
+                parseParameterRhs(solution.tokenKind);
+            }
+        }
     }
 
     /**
@@ -404,8 +420,8 @@ public class BallerinaParser {
      * @param token
      * @return
      */
-    private boolean isEndOfParameter(Token token) {
-        switch (token.kind) {
+    private boolean isEndOfParameter(TokenKind tokenKind) {
+        switch (tokenKind) {
             case CLOSE_BRACE:
             case CLOSE_PARENTHESIS:
             case CLOSE_BRACKET:
@@ -683,6 +699,18 @@ public class BallerinaParser {
     }
 
     /**
+     * Parse binary operator.
+     */
+    private void parseBinaryOperator() {
+        Token token = peek();
+        if (isBinaryOperator(token.kind)) {
+            this.listner.exitOperator(consume()); // binary operator
+        } else {
+            recover(token, ParserRuleContext.BINARY_OPERATOR);
+        }
+    }
+
+    /**
      * Check whether the given token kind is a binary operator.
      * 
      * @param kind Token kind
@@ -702,6 +730,50 @@ public class BallerinaParser {
                 return true;
             default:
                 return false;
+        }
+    }
+
+    /**
+     * Get the precedence of a given operator.
+     * 
+     * @param binaryOpKind Operator kind
+     * @return Precedence of the given operator
+     */
+    private OperatorPrecedence getOpPrecedence(TokenKind binaryOpKind) {
+        switch (binaryOpKind) {
+            case MUL:
+            case DIV:
+                return OperatorPrecedence.MULTIPLICATIVE;
+            case ADD:
+            case SUB:
+                return OperatorPrecedence.ADDITIVE;
+            case GT:
+            case LT:
+                return OperatorPrecedence.BINARY_COMPARE;
+            default:
+                throw new UnsupportedOperationException("Unsupported binary operator '" + binaryOpKind + "'");
+        }
+    }
+
+    /**
+     * <p>
+     * Get the operator kind to insert during recovery, given the precedence level.
+     * </p>
+     * 
+     * @param opPrecedenceLevel Precedence of the given operator
+     * @return
+     */
+    private TokenKind getOperatorKindToInsert(OperatorPrecedence opPrecedenceLevel) {
+        switch (opPrecedenceLevel) {
+            case MULTIPLICATIVE:
+                return TokenKind.MUL;
+            case ADDITIVE:
+                return TokenKind.ADD;
+            case BINARY_COMPARE:
+                return TokenKind.LT;
+            default:
+                throw new UnsupportedOperationException(
+                        "Unsupported operator precedence level'" + opPrecedenceLevel + "'");
         }
     }
 
@@ -897,18 +969,30 @@ public class BallerinaParser {
      * Parse the right-hand-side of a binary expression.
      * </p>
      * <code>binary-expr-rhs := (binary-op expression)*</code>
+     * 
+     * @param precedenceLevel Precedence level of the expression that is being parsed currently
      */
     private void parseBinaryExprRhs(OperatorPrecedence precedenceLevel) {
         Token token = peek();
-        if (isEndOfExpression(token)) {
+        parseBinaryExprRhs(precedenceLevel, token.kind);
+    }
+
+    /**
+     * Parse the right hand side of a binary expression given the next token kind.
+     * 
+     * @param precedenceLevel Precedence level of the expression that is being parsed currently
+     * @param tokenKind Next token kind
+     */
+    private void parseBinaryExprRhs(OperatorPrecedence precedenceLevel, TokenKind tokenKind) {
+        if (isEndOfExpression(tokenKind)) {
             return;
         }
 
         TokenKind binaryOpKind;
-        boolean operatorRecovered = false;
-        if (isBinaryOperator(token.kind)) {
-            binaryOpKind = token.kind;
+        if (isBinaryOperator(tokenKind)) {
+            binaryOpKind = tokenKind;
         } else {
+            Token token = peek();
             Solution solution = recover(token, ParserRuleContext.BINARY_EXPR_RHS);
 
             // If the current rule was recovered by removing a token,
@@ -919,25 +1003,29 @@ public class BallerinaParser {
                 return;
             }
 
-            // We come here if the operator is missing. Treat this as injecting an operator
-            // that matches to the current operator precedence level, and continue.
-            binaryOpKind = getOperatorKindToInsert(precedenceLevel);
-            operatorRecovered = true;
+            // If the parser recovered by inserting a token, then try to re-parse the same
+            // rule with the inserted token token. This is done to pick the correct branch
+            // to continue the parsing.
+            if (solution.ctx == ParserRuleContext.BINARY_OPERATOR) {
+                // We come here if the operator is missing. Treat this as injecting an operator
+                // that matches to the current operator precedence level, and continue.
+                binaryOpKind = getOperatorKindToInsert(precedenceLevel);
+                parseBinaryExprRhs(precedenceLevel, binaryOpKind);
+            } else {
+                parseBinaryExprRhs(precedenceLevel, solution.tokenKind);
+            }
+            return;
         }
 
         // If the precedence level of the operator that was being parsed is higher than
         // the newly found (next) operator, then return and finish the previous expr,
         // because it has a higher precedence.
-        OperatorPrecedence operatorPrecedence = getOpPrecedence(binaryOpKind);
+        OperatorPrecedence operatorPrecedence = getOpPrecedence(tokenKind);
         if (precedenceLevel.isHigherThan(operatorPrecedence)) {
             return;
         }
 
-        // Parse the operator
-        if (!operatorRecovered) {
-            Token binaryOp = consume();
-            this.listner.exitOperator(binaryOp); // operator
-        }
+        parseBinaryOperator();
 
         // Parse expression that follows the binary operator, until a operator
         // with different precedence is encountered. If an operator with lower
@@ -950,50 +1038,6 @@ public class BallerinaParser {
 
         // Then continue the operators with the same precedence level.
         parseBinaryExprRhs(precedenceLevel);
-    }
-
-    /**
-     * Get the precedence of a given operator.
-     * 
-     * @param binaryOpKind Operator kind
-     * @return Precedence of the given operator
-     */
-    private OperatorPrecedence getOpPrecedence(TokenKind binaryOpKind) {
-        switch (binaryOpKind) {
-            case MUL:
-            case DIV:
-                return OperatorPrecedence.MULTIPLICATIVE;
-            case ADD:
-            case SUB:
-                return OperatorPrecedence.ADDITIVE;
-            case GT:
-            case LT:
-                return OperatorPrecedence.BINARY_COMPARE;
-            default:
-                throw new UnsupportedOperationException("Unsupported binary operator '" + binaryOpKind + "'");
-        }
-    }
-
-    /**
-     * <p>
-     * Get the operator kind to insert during recovery, given the precedence level.
-     * </p>
-     * 
-     * @param opPrecedenceLevel Precedence of the given operator
-     * @return
-     */
-    private TokenKind getOperatorKindToInsert(OperatorPrecedence opPrecedenceLevel) {
-        switch (opPrecedenceLevel) {
-            case MULTIPLICATIVE:
-                return TokenKind.MUL;
-            case ADDITIVE:
-                return TokenKind.ADD;
-            case BINARY_COMPARE:
-                return TokenKind.LT;
-            default:
-                throw new UnsupportedOperationException(
-                        "Unsupported operator precedence level'" + opPrecedenceLevel + "'");
-        }
     }
 
     /**
@@ -1015,8 +1059,8 @@ public class BallerinaParser {
      * @param token Token to check
      * @return <code>true</code> if the token represents an end of a block. <code>false</code> otherwise
      */
-    private boolean isEndOfExpression(Token token) {
-        switch (token.kind) {
+    private boolean isEndOfExpression(TokenKind tokenKind) {
+        switch (tokenKind) {
             case CLOSE_BRACE:
             case CLOSE_PARENTHESIS:
             case CLOSE_BRACKET:

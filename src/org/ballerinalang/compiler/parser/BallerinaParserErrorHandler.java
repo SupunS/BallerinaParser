@@ -59,14 +59,12 @@ public class BallerinaParserErrorHandler {
             { ParserRuleContext.FUNC_BODY_BLOCK, ParserRuleContext.EXTERNAL_FUNC_BODY };
 
     private static final ParserRuleContext[] STATEMENTS =
-            { 
-                    ParserRuleContext.ASSIGNMENT_STMT,
-                    ParserRuleContext.VAR_DECL_STMT, 
-                    ParserRuleContext.CLOSE_BRACE // this marks an end of statement block
-            };
+            { ParserRuleContext.ASSIGNMENT_STMT, ParserRuleContext.VAR_DECL_STMT, ParserRuleContext.CLOSE_BRACE };
 
     private static final ParserRuleContext[] VAR_DECL_RHS =
             { ParserRuleContext.SEMICOLON, ParserRuleContext.ASSIGN_OP };
+
+    private static final ParserRuleContext[] PARAMETER_RHS = { ParserRuleContext.COMMA, ParserRuleContext.ASSIGN_OP };
 
     /**
      * Limit for the distance to travel, to determine a successful lookahead.
@@ -205,6 +203,8 @@ public class BallerinaParserErrorHandler {
             case STATEMENT:
             case FUNC_BODY:
             case VAR_DECL_STMT_RHS:
+            case BINARY_EXPR_RHS:
+            case PARAMETER_RHS:
                 return true;
             default:
                 return false;
@@ -414,8 +414,24 @@ public class BallerinaParserErrorHandler {
                 case VAR_DECL_STMT_RHS:
                     return seekInAlternativesPaths(lookahead, currentDepth, matchingRulesCount, fixes, VAR_DECL_RHS);
 
-                // productions
                 case BINARY_EXPR_RHS:
+                    // Binary expr rhs can be either the end of the expression or can be (binary-op expression).
+                    ParserRuleContext parentCtx = getParentContext();
+                    ParserRuleContext exprEndCtx;
+                    if (parentCtx == ParserRuleContext.PARAM_LIST) {
+                        exprEndCtx = ParserRuleContext.COMMA;
+                    } else {
+                        exprEndCtx = ParserRuleContext.SEMICOLON;
+                    }
+                    ParserRuleContext[] alternatives = { ParserRuleContext.BINARY_OPERATOR, exprEndCtx };
+                    return seekInAlternativesPaths(lookahead, currentDepth, matchingRulesCount, fixes, alternatives);
+                case COMMA:
+                    hasMatch = nextToken.kind == TokenKind.COMMA;
+                    break;
+                case PARAMETER_RHS:
+                    return seekInAlternativesPaths(lookahead, currentDepth, matchingRulesCount, fixes, PARAMETER_RHS);
+
+                // productions
                 case COMP_UNIT:
                 case FUNC_DEFINITION:
                 case FUNC_SIGNATURE:
@@ -529,7 +545,7 @@ public class BallerinaParserErrorHandler {
                 // Here we assume the end of an expression is always a semicolon
                 // TODO: add other types of expression-end
                 ParserRuleContext parentCtx = getParentContext();
-                if (parentCtx == ParserRuleContext.PARAMETER) {
+                if (parentCtx == ParserRuleContext.PARAM_LIST) {
                     nextContext = ParserRuleContext.COMMA;
                 } else if (isStatement(parentCtx)) {
                     nextContext = ParserRuleContext.SEMICOLON;
@@ -715,7 +731,8 @@ public class BallerinaParserErrorHandler {
             case STATEMENT:
             case VAR_DECL_STMT:
             case ASSIGNMENT_STMT:
-            case PARAMETER:
+            case PARAM_LIST:
+                // case PARAMETER:
                 // case EXPRESSION:
                 pushContext(currentCtx);
             default:
@@ -748,7 +765,7 @@ public class BallerinaParserErrorHandler {
                 parentCtx = getParentContext();
                 if (parentCtx == ParserRuleContext.EXTERNAL_FUNC_BODY) {
                     return ParserRuleContext.EXTERNAL_KEYWORD;
-                } else if (isStatement(parentCtx) || parentCtx == ParserRuleContext.PARAMETER) {
+                } else if (isStatement(parentCtx) || parentCtx == ParserRuleContext.PARAM_LIST) {
                     return ParserRuleContext.EXPRESSION;
                 } else {
                     throw new IllegalStateException();
@@ -768,7 +785,7 @@ public class BallerinaParserErrorHandler {
                 nextToken = this.tokenReader.peek(nextLookahead);
                 if (isEndOfExpression(nextToken)) {
                     parentCtx = getParentContext();
-                    if (parentCtx == ParserRuleContext.PARAMETER) {
+                    if (parentCtx == ParserRuleContext.PARAM_LIST) {
                         return ParserRuleContext.COMMA;
                     } else if (isStatement(parentCtx)) {
                         return ParserRuleContext.SEMICOLON;
@@ -836,7 +853,7 @@ public class BallerinaParserErrorHandler {
                 }
             case TYPE_DESCRIPTOR:
                 parentCtx = getParentContext();
-                if (isStatement(parentCtx) || parentCtx == ParserRuleContext.PARAMETER) {
+                if (isStatement(parentCtx) || parentCtx == ParserRuleContext.PARAM_LIST) {
                     return ParserRuleContext.VARIABLE_NAME;
                 } else if (parentCtx == ParserRuleContext.RETURN_TYPE_DESCRIPTOR) {
                     return ParserRuleContext.FUNC_BODY;
@@ -846,7 +863,7 @@ public class BallerinaParserErrorHandler {
             case VARIABLE_NAME:
                 nextToken = this.tokenReader.peek(nextLookahead);
                 parentCtx = getParentContext();
-                if (parentCtx == ParserRuleContext.PARAMETER) {
+                if (parentCtx == ParserRuleContext.PARAM_LIST) {
                     if (isEndOfParametersList(nextToken)) {
                         return ParserRuleContext.CLOSE_PARENTHESIS;
                     } else if (isEndOfParameter(nextToken)) {
@@ -883,7 +900,7 @@ public class BallerinaParserErrorHandler {
                 return ParserRuleContext.EXPRESSION;
             case COMMA:
                 parentCtx = getParentContext();
-                if (parentCtx == ParserRuleContext.PARAMETER) {
+                if (parentCtx == ParserRuleContext.PARAM_LIST) {
                     return ParserRuleContext.PARAMETER;
                 }
 
@@ -992,7 +1009,6 @@ public class BallerinaParserErrorHandler {
                 return TokenKind.OPEN_BRACE;
             case OPEN_PARENTHESIS:
                 return TokenKind.OPEN_PARENTHESIS;
-
             case RETURNS_KEYWORD:
                 return TokenKind.RETURNS;
             case SEMICOLON:
@@ -1034,9 +1050,9 @@ public class BallerinaParserErrorHandler {
      */
     public class Solution {
 
-        private ParserRuleContext ctx;
+        public ParserRuleContext ctx;
         public Action action;
-        private String token;
+        public String token;
         public TokenKind tokenKind;
 
         public Solution(Action action, ParserRuleContext ctx, TokenKind tokenKind, String tokenText) {

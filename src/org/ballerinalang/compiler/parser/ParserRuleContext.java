@@ -27,6 +27,7 @@ public enum ParserRuleContext {
     PARAM_LIST("parameters"),
     PARAMETER("parameter"),
     FOLLOW_UP_PARAM("follow-up-param"),
+    PARAMETER_RHS("parameter-rhs"),
     ANNOTATION_ATTACHMENT("annotation"),
     FUNC_BODY("func-body"),
     FUNC_SIGNATURE("func-signature"),
