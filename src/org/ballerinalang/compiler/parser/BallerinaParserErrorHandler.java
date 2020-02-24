@@ -19,7 +19,6 @@ package org.ballerinalang.compiler.parser;
 
 import java.util.ArrayDeque;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 
 /**
@@ -28,7 +27,7 @@ import java.util.List;
  * 
  * When an unexpected token is reached, error handler will try inserting/removing a token from the current head, and see
  * how far the parser can successfully progress. After fixing the current head and trying to progress, if it encounters
- * more issues, then it will try to fix those as well. All possible combinations of insertions and deletions will be
+ * more errors, then it will try to fix those as well. All possible combinations of insertions and deletions will be
  * tried out for such errors. Once all possible paths are discovered, pick the optimal combination that leads to the
  * best recovery. Finally, apply the best solution and continue the parsing.
  * <br/>
@@ -71,8 +70,6 @@ public class BallerinaParserErrorHandler {
      */
     private static final int LOOKAHEAD_LIMIT = 5;
 
-    // private Map<Key, Solution> recoveryCache = new HashMap<>();
-
     public BallerinaParserErrorHandler(TokenReader tokenReader, BallerinaParserListener listner,
             BallerinaParser parser) {
         this.tokenReader = tokenReader;
@@ -109,13 +106,6 @@ public class BallerinaParserErrorHandler {
     public Solution recover(ParserRuleContext currentCtx, Token nextToken) {
         // Assumption: always comes here after a peek()
 
-        // Key key = new Key(nextToken, currentContext);
-        // Solution fromCace = this.recoveryCache.get(key);
-        // if (fromCace != null) {
-        // applyFix(fromCace);
-        // return;
-        // }
-
         if (nextToken.kind == TokenKind.EOF) {
             reportMissingTokenError("missing " + currentCtx);
             this.listner.addMissingNode(currentCtx.toString());
@@ -124,22 +114,14 @@ public class BallerinaParserErrorHandler {
 
         Result bestMatch = seekMatch(currentCtx);
         if (bestMatch.matches > 0) {
-
-            // Add to cache
-            // for (Solution item : bestMatch.fixes) {
-            // this.recoveryCache.put(new Key(nextToken, item.ctx), item);
-            // }
-
             Solution fix = bestMatch.fixes.pop();
             applyFix(currentCtx, fix);
             return fix;
         } else {
-            // fail safe
-            // this means we can't find a path to recover
+            // Fail safe. This means we can't find a path to recover.
             removeInvalidToken();
             return new Solution(Action.REMOVE, currentCtx, nextToken.kind, nextToken.text);
         }
-
     }
 
     /**
@@ -651,11 +633,11 @@ public class BallerinaParserErrorHandler {
      * Pick the solution with the longest matching sequence.
      * </li>
      * <li>
-     * If there's a tie, then check for the solution which requires lowest number of 'fixes'.
+     * If there's a tie, then check for the solution which requires the lowest number of 'fixes'.
      * </li>
      * </li>
      * <li>
-     * If there's a tie, then give priority for the 'insertion' as that doesn't require to remove
+     * If there's a tie, then give priority for the 'insertion' as that doesn't require removing
      * an input a user has given.
      * </li>
      * </ol>
@@ -1075,34 +1057,5 @@ public class BallerinaParserErrorHandler {
      */
     enum Action {
         INSERT, REMOVE;
-    }
-
-    private class Key {
-        Token token;
-        ParserRuleContext ctx;
-        int hash;
-
-        Key(Token token, ParserRuleContext ctx) {
-            this.token = token;
-            this.ctx = ctx;
-            this.hash = Arrays.deepHashCode(new Object[] { this.token, this.ctx });
-        }
-
-        @Override
-        public int hashCode() {
-            return this.hash;
-        }
-
-        @Override
-        public boolean equals(Object obj) {
-            if (obj == null) {
-                return false;
-            }
-
-            if (!(obj instanceof Key)) {
-                return false;
-            }
-            return ((Key) obj).ctx.equals(ctx) && ((Key) obj).token.equals(token);
-        }
     }
 }
