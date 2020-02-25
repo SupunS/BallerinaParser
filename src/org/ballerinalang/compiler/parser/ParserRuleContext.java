@@ -22,6 +22,7 @@ public enum ParserRuleContext {
     // productions
     COMP_UNIT("comp-unit"),
     TOP_LEVEL_NODE("top-level-node"),
+    TOP_LEVEL_NODE_WITH_MODIFIER("top-level-node-with-modifier"),
     FUNC_DEFINITION("func-definition"),
     STATEMENT("statement"),
     PARAM_LIST("parameters"),
@@ -40,6 +41,7 @@ public enum ParserRuleContext {
     VAR_DECL_STMT_RHS_VALUE("var-decl-rhs-value"),
 
     // terminals
+    PUBLIC("public"),
     FUNCTION_KEYWORD("function"),
     FUNC_NAME("function-name"),
     OPEN_PARENTHESIS("("),

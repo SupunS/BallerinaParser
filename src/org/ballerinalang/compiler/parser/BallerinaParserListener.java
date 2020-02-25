@@ -43,17 +43,13 @@ import org.ballerinalang.compiler.parser.tree.VarDefStmtNode;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Stack;
 
 public class BallerinaParserListener {
 
     private final ArrayDeque<ASTNode> nodesStack = new ArrayDeque<>();
     private List<ASTNode> statements = new ArrayList<>();
-
-    // TODO: make this a stack of lists (nested modifiers are possible)
-    private List<ASTNode> modifiersList = new ArrayList<>(2);
-
-    // TODO: make this a stack of lists
-    private List<ASTNode> parameters = new ArrayList<>();
+    private Stack<List<ASTNode>> parameters = new Stack<>();
 
     public void exitCompUnit() {
         System.out.println("--------------------------------------");
@@ -65,7 +61,11 @@ public class BallerinaParserListener {
     }
 
     public void exitModifier(Token modifier) {
-        this.modifiersList.add(new ModifierNode(modifier));
+        this.nodesStack.push(new ModifierNode(modifier));
+    }
+
+    public void addEmptyModifier() {
+        this.nodesStack.push(new EmptyNode());
     }
 
     public void exitFunctionDefinition() {
@@ -77,20 +77,21 @@ public class BallerinaParserListener {
         func.leftParenthesis = this.nodesStack.pop();
         func.name = this.nodesStack.pop();
         func.functionKeyword = this.nodesStack.pop();
-        func.modifiers = this.modifiersList;
+        func.modifier = this.nodesStack.pop();
         this.nodesStack.push(func);
-
-        this.modifiersList = new ArrayList<>(2);
     }
 
     public void exitFunctionSignature() {
         // do nothing
     }
 
+    public void startParamList() {
+        this.parameters.add(new ArrayList<>());
+    }
+
     public void exitParamList() {
         ParametersNode params = new ParametersNode();
-        params.parameters = this.parameters;
-        this.parameters = new ArrayList<>();
+        params.parameters = this.parameters.pop();
         this.nodesStack.push(params);
     }
 
@@ -155,7 +156,7 @@ public class BallerinaParserListener {
         param.varName = this.nodesStack.pop();
         param.type = this.nodesStack.pop();
         param.comma = this.nodesStack.pop();
-        parameters.add(param);
+        this.parameters.peek().add(param);
     }
 
     public void exitDefaultableParameter() {
@@ -165,7 +166,7 @@ public class BallerinaParserListener {
         param.varName = this.nodesStack.pop();
         param.type = this.nodesStack.pop();
         param.comma = this.nodesStack.pop();
-        parameters.add(param);
+        this.parameters.peek().add(param);
     }
 
     public void exitRestParameter() {
@@ -174,7 +175,7 @@ public class BallerinaParserListener {
         param.ellipsis = this.nodesStack.pop();
         param.type = this.nodesStack.pop();
         param.comma = this.nodesStack.pop();
-        parameters.add(param);
+        this.parameters.peek().add(param);
     }
 
     public void addEmptyNode() {

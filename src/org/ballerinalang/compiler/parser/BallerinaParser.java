@@ -135,6 +135,11 @@ public class BallerinaParser {
                 parseParameterRhs();
                 break;
             case TOP_LEVEL_NODE:
+                parseTopLevelNode();
+                break;
+            case TOP_LEVEL_NODE_WITH_MODIFIER:
+                parseTopLevelNodeWithModifier();
+                break;
             default:
                 throw new IllegalStateException("Cannot re-parse rule:" + context);
 
@@ -172,7 +177,7 @@ public class BallerinaParser {
         switchContext(ParserRuleContext.COMP_UNIT);
         Token token = peek();
         while (token.kind != TokenKind.EOF) {
-            parseTopLevelNode();
+            parseTopLevelNodeWithModifier(token.kind);
             token = peek();
         }
 
@@ -181,19 +186,72 @@ public class BallerinaParser {
     }
 
     /**
-     * Parse top level nodes.
+     * Parse top level node having an optional modifier preceding it.
+     */
+    private void parseTopLevelNodeWithModifier() {
+        Token token = peek();
+        parseTopLevelNodeWithModifier(token.kind);
+    }
+
+    /**
+     * Parse top level node having an optional modifier preceding it, given the next token kind.
+     * 
+     * @param tokenKind Next token kind
+     */
+    private void parseTopLevelNodeWithModifier(TokenKind tokenKind) {
+        switch (tokenKind) {
+            case PUBLIC:
+                parseModifier();
+                tokenKind = peek().kind;
+                break;
+            case FUNCTION:
+                this.listner.addEmptyModifier();
+                break;
+            default:
+                Token token = peek();
+                Solution solution = recover(token, ParserRuleContext.TOP_LEVEL_NODE_WITH_MODIFIER);
+
+                // If the parser recovered by inserting a token, then try to re-parse the same
+                // rule with the inserted token token. This is done to pick the correct branch
+                // to continue the parsing.
+                if (solution.action == Action.INSERT) {
+                    parseTopLevelNodeWithModifier(solution.tokenKind);
+                }
+
+                return;
+        }
+
+        parseTopLevelNode(tokenKind);
+    }
+
+    /**
+     * Parse top level node.
      */
     private void parseTopLevelNode() {
         Token token = peek();
-        switch (token.kind) {
-            case PUBLIC:
-                parseModifier();
-                break;
+        parseTopLevelNode(token.kind);
+    }
+
+    /**
+     * Parse top level node given the next token kind.
+     * 
+     * @param tokenKind Next token kind
+     */
+    private void parseTopLevelNode(TokenKind tokenKind) {
+        switch (tokenKind) {
             case FUNCTION:
                 parseFunctionDefinition();
                 break;
             default:
-                this.errorHandler.removeInvalidToken();
+                Token token = peek();
+                Solution solution = recover(token, ParserRuleContext.TOP_LEVEL_NODE);
+
+                // If the parser recovered by inserting a token, then try to re-parse the same
+                // rule with the inserted token token. This is done to pick the correct branch
+                // to continue the parsing.
+                if (solution.action == Action.INSERT) {
+                    parseTopLevelNode(solution.tokenKind);
+                }
                 break;
         }
     }
@@ -202,7 +260,12 @@ public class BallerinaParser {
      * Parse access modifiers.
      */
     private void parseModifier() {
-        this.listner.exitModifier(consume());
+        Token token = peek();
+        if (token.kind == TokenKind.PUBLIC) {
+            this.listner.exitModifier(consume()); // public keyword
+        } else {
+            recover(token, ParserRuleContext.PUBLIC);
+        }
     }
 
     /**
@@ -215,16 +278,21 @@ public class BallerinaParser {
      */
     private void parseFunctionDefinition() {
         switchContext(ParserRuleContext.FUNC_DEFINITION);
-
-        this.listner.exitSyntaxNode(consume()); // 'function' keyword. This is already verified
-
+        parseFunctionKeyword();
         parseFunctionName();
         parseFunctionSignature();
         parseFunctionBody();
-
         this.listner.exitFunctionDefinition();
-
         revertContext();
+    }
+
+    private void parseFunctionKeyword() {
+        Token token = peek();
+        if (token.kind == TokenKind.FUNCTION) {
+            this.listner.exitFunctionName(consume()); // function keyword
+        } else {
+            recover(token, ParserRuleContext.FUNCTION_KEYWORD);
+        }
     }
 
     private void parseFunctionName() {
@@ -302,6 +370,7 @@ public class BallerinaParser {
      */
     private void parseParamList() {
         switchContext(ParserRuleContext.PARAM_LIST);
+        this.listner.startParamList();
 
         Token token = peek();
         if (!isEndOfParametersList(token)) {

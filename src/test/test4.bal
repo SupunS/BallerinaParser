@@ -67,3 +67,54 @@ public function jjj() {
     = 6;
 }
 
+public function kkk() {
+    x = a + b - c;
+    x = a + b * c - d / e;
+    x = a * b /+ c;
+    x = a / b + # +c;
+    x = a / b + # +c + d e * f;
+    x = a - b c;
+}
+
+public function lll() {
+    x = a + b * c * d *g *h - e / f;
+    x = (a + b) * (c - d) / e;
+
+    x = (a + b * c;
+    x = a + b * c);
+    x = (a + (b * c);
+
+    x = a + b < c - d /  e;
+}
+
+public function foo(int a, int b = 7, int c, string... d) {
+}
+
+public function foo(int, int b  7,  c, ... d) {
+}
+
+
+public function foo )int, int b  7,  c, ... d 
+    
+}
+
+function foo ()
+    int x 
+}
+
+public function foo ) 
+    int x = hello; 
+}
+
+public function foo(int a int b = 7, int c, string... d) {
+}
+
+function foo(int a, int b = 7 8, int c, string... d) {
+    int x = 4
+    int y = 6;
+}
+
+
+foo() {
+
+}

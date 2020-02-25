@@ -98,7 +98,7 @@ public function foo )int, int b  7,  c, ... d
     
 }
 
-public function foo ()
+function foo ()
     int x 
 }
 
@@ -109,7 +109,12 @@ public function foo )
 public function foo(int a int b = 7, int c, string... d) {
 }
 
-public function foo(int a, int b = 7 8, int c, string... d) {
+function foo(int a, int b = 7 8, int c, string... d) {
     int x = 4
     int y = 6;
+}
+
+
+foo() {
+
 }

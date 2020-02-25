@@ -182,6 +182,8 @@ public class BallerinaParserErrorHandler {
 
     private boolean isProductionWithAlternatives(ParserRuleContext currentCtx) {
         switch (currentCtx) {
+            case TOP_LEVEL_NODE:
+            case TOP_LEVEL_NODE_WITH_MODIFIER:
             case STATEMENT:
             case FUNC_BODY:
             case VAR_DECL_STMT_RHS:
@@ -322,6 +324,15 @@ public class BallerinaParserErrorHandler {
             }
 
             switch (currentCtx) {
+                case TOP_LEVEL_NODE:
+                    ParserRuleContext[] topLevelNodes = { ParserRuleContext.FUNC_DEFINITION };
+                    return seekInAlternativesPaths(lookahead, currentDepth, matchingRulesCount, fixes, topLevelNodes);
+                case TOP_LEVEL_NODE_WITH_MODIFIER:
+                    topLevelNodes = new ParserRuleContext[] { ParserRuleContext.PUBLIC, ParserRuleContext.FUNC_DEFINITION };
+                    return seekInAlternativesPaths(lookahead, currentDepth, matchingRulesCount, fixes, topLevelNodes);
+                case PUBLIC:
+                    hasMatch = nextToken.kind == TokenKind.FUNCTION;
+                    break;
                 case FUNCTION_KEYWORD:
                     hasMatch = nextToken.kind == TokenKind.FUNCTION;
                     break;
@@ -330,12 +341,6 @@ public class BallerinaParserErrorHandler {
                     break;
                 case OPEN_PARENTHESIS:
                     hasMatch = nextToken.kind == TokenKind.OPEN_PARENTHESIS;
-                    break;
-                case PARAM_LIST:
-                    // TODO: handle parameters list
-                case PARAMETER:
-                    // TODO: handle parameters
-                    skipRule = true;
                     break;
                 case CLOSE_PARENTHESIS:
                     hasMatch = nextToken.kind == TokenKind.CLOSE_PARENTHESIS;
@@ -368,13 +373,6 @@ public class BallerinaParserErrorHandler {
                     break;
                 case SEMICOLON:
                     hasMatch = nextToken.kind == TokenKind.SEMICOLON;
-                    break;
-                case TOP_LEVEL_NODE:
-                    hasMatch = nextToken.kind == TokenKind.PUBLIC;
-                    // Skip the optional rule if no match is found
-                    if (!hasMatch) {
-                        skipRule = true;
-                    }
                     break;
                 case VARIABLE_NAME:
                     hasMatch = nextToken.kind == TokenKind.IDENTIFIER;
@@ -422,6 +420,8 @@ public class BallerinaParserErrorHandler {
                 case FUNC_BODY_BLOCK:
                 case ASSIGNMENT_STMT:
                 case VAR_DECL_STMT:
+                case PARAM_LIST:
+                case PARAMETER:
                 default:
                     // Stay at the same place
                     skipRule = true;
@@ -724,6 +724,8 @@ public class BallerinaParserErrorHandler {
         ParserRuleContext parentCtx;
         switch (currentCtx) {
             case COMP_UNIT:
+                return ParserRuleContext.TOP_LEVEL_NODE_WITH_MODIFIER;
+            case PUBLIC:
                 return ParserRuleContext.TOP_LEVEL_NODE;
             case FUNC_DEFINITION:
                 return ParserRuleContext.FUNCTION_KEYWORD;
@@ -817,7 +819,6 @@ public class BallerinaParserErrorHandler {
                     popContext(); // end external func
                     return ParserRuleContext.TOP_LEVEL_NODE;
                 } else if (isExpression(parentCtx)) {
-                    // popContext(); // end expression
                     // A semicolon after an expression also means its an end of a statement, Hence pop the ctx.
                     popContext(); // end statement
                     if (isEndOfBlock(this.tokenReader.peek(nextLookahead))) {
@@ -997,6 +998,8 @@ public class BallerinaParserErrorHandler {
                 return TokenKind.SEMICOLON;
             case VARIABLE_NAME:
                 return TokenKind.IDENTIFIER;
+            case PUBLIC:
+                return TokenKind.PUBLIC;
             case ANNOTATION_ATTACHMENT:
             case ASSIGNMENT_STMT:
             case BINARY_EXPR_RHS:
@@ -1016,6 +1019,8 @@ public class BallerinaParserErrorHandler {
             case VAR_DECL_STMT:
             case VAR_DECL_STMT_RHS:
             case VAR_DECL_STMT_RHS_VALUE:
+            case PARAMETER_RHS:
+            case TOP_LEVEL_NODE_WITH_MODIFIER:
             default:
                 break;
         }
@@ -1025,8 +1030,8 @@ public class BallerinaParserErrorHandler {
 
     /**
      * Represents a solution/fix for a parser error. A {@link Solution} consists of the parser context where the error
-     * was encountered, the enclosing parser context, the token with the error, and the {@link Action} required to
-     * recover.
+     * was encountered, the enclosing parser context at the same point, the token with the error, and the {@link Action}
+     * required to recover from the error.
      * 
      * @since 1.2.0
      */
