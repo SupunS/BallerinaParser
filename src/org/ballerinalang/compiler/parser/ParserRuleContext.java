@@ -21,20 +21,20 @@ public enum ParserRuleContext {
 
     // productions
     COMP_UNIT("comp-unit"),
-    TOP_LEVEL_NODE("top-level-node"),
     TOP_LEVEL_NODE_WITH_MODIFIER("top-level-node-with-modifier"),
+    TOP_LEVEL_NODE("top-level-node"),
     FUNC_DEFINITION("func-definition"),
-    STATEMENT("statement"),
+    FUNC_SIGNATURE("func-signature"),
     PARAM_LIST("parameters"),
     PARAMETER("parameter"),
-    FOLLOW_UP_PARAM("follow-up-param"),
     PARAMETER_RHS("parameter-rhs"),
+    FOLLOW_UP_PARAM("follow-up-param"),
     ANNOTATION_ATTACHMENT("annotation"),
+    RETURN_TYPE_DESCRIPTOR("return-type-desc"),
     FUNC_BODY("func-body"),
-    FUNC_SIGNATURE("func-signature"),
     EXTERNAL_FUNC_BODY("external-func-body"),
     FUNC_BODY_BLOCK("func-body-block"),
-    RETURN_TYPE_DESCRIPTOR("return-type-desc"),
+    STATEMENT("statement"),
     ASSIGNMENT_STMT("assignment-stmt"),
     VAR_DECL_STMT("var-decl-stmt"),
     VAR_DECL_STMT_RHS("var-decl-rhs"),
@@ -60,9 +60,6 @@ public enum ParserRuleContext {
     // expressions
     EXPRESSION("expression"),
     BINARY_EXPR_RHS("expression-rhs"),
-    //LITERAL_EXPR("literal"),
-    // CAST_EXPR("cast-expr")
-    // BINARY_EXPR("binary-expr"),
     ;
 
     private String value;

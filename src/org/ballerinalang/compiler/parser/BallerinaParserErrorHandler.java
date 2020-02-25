@@ -65,6 +65,11 @@ public class BallerinaParserErrorHandler {
 
     private static final ParserRuleContext[] PARAMETER_RHS = { ParserRuleContext.COMMA, ParserRuleContext.ASSIGN_OP };
 
+    private static final ParserRuleContext[] TOP_LEVEL_NODES = { ParserRuleContext.FUNC_DEFINITION };
+
+    private static final ParserRuleContext[] TOP_LEVEL_NODES_WITH_MODIFIERS =
+            new ParserRuleContext[] { ParserRuleContext.PUBLIC, ParserRuleContext.FUNC_DEFINITION };
+
     /**
      * Limit for the distance to travel, to determine a successful lookahead.
      */
@@ -167,12 +172,11 @@ public class BallerinaParserErrorHandler {
      * @return Snapshot of the current context stack
      */
     private ArrayDeque<ParserRuleContext> getCtxStackSnapshot() {
-        ArrayDeque<ParserRuleContext> stackCopy = new ArrayDeque<>();
-        for (ParserRuleContext ctx : ctxStack) {
-            stackCopy.add(ctx);
-        }
-
-        return stackCopy;
+        // Using ArraDeque#clone() here since it has better performance, than manually
+        // creating a clone. ArraDeque#clone() method internally copies the value array
+        // and avoids all the checks that is there when calling add()/addAll() methods.
+        // Therefore has better performance.
+        return this.ctxStack.clone();
     }
 
     private void reportMissingTokenError(String message) {
@@ -311,7 +315,6 @@ public class BallerinaParserErrorHandler {
     private Result seekMatch(ParserRuleContext currentCtx, int lookahead, int currentDepth) {
         boolean hasMatch;
         boolean skipRule;
-        ArrayDeque<Solution> fixes = new ArrayDeque<>();
         int matchingRulesCount = 0;
 
         while (currentDepth < LOOKAHEAD_LIMIT) {
@@ -325,11 +328,10 @@ public class BallerinaParserErrorHandler {
 
             switch (currentCtx) {
                 case TOP_LEVEL_NODE:
-                    ParserRuleContext[] topLevelNodes = { ParserRuleContext.FUNC_DEFINITION };
-                    return seekInAlternativesPaths(lookahead, currentDepth, matchingRulesCount, fixes, topLevelNodes);
+                    return seekInAlternativesPaths(lookahead, currentDepth, matchingRulesCount, TOP_LEVEL_NODES);
                 case TOP_LEVEL_NODE_WITH_MODIFIER:
-                    topLevelNodes = new ParserRuleContext[] { ParserRuleContext.PUBLIC, ParserRuleContext.FUNC_DEFINITION };
-                    return seekInAlternativesPaths(lookahead, currentDepth, matchingRulesCount, fixes, topLevelNodes);
+                    return seekInAlternativesPaths(lookahead, currentDepth, matchingRulesCount,
+                            TOP_LEVEL_NODES_WITH_MODIFIERS);
                 case PUBLIC:
                     hasMatch = nextToken.kind == TokenKind.FUNCTION;
                     break;
@@ -357,7 +359,7 @@ public class BallerinaParserErrorHandler {
                     hasMatch = nextToken.kind == TokenKind.TYPE;
                     break;
                 case FUNC_BODY:
-                    return seekInFuncBodies(lookahead, currentDepth, matchingRulesCount, fixes);
+                    return seekInFuncBodies(lookahead, currentDepth, matchingRulesCount);
                 case OPEN_BRACE:
                     hasMatch = nextToken.kind == TokenKind.OPEN_BRACE;
                     break;
@@ -385,15 +387,14 @@ public class BallerinaParserErrorHandler {
                         skipRule = true;
                         break;
                     }
-                    return seekInStatements(currentCtx, nextToken, lookahead, currentDepth, matchingRulesCount, fixes);
+                    return seekInStatements(currentCtx, nextToken, lookahead, currentDepth, matchingRulesCount);
                 case BINARY_OPERATOR:
                     hasMatch = isBinaryOperator(nextToken);
                     break;
                 case EXPRESSION:
-                    return seekInExpression(currentCtx, lookahead, currentDepth, matchingRulesCount, fixes);
+                    return seekInExpression(currentCtx, lookahead, currentDepth, matchingRulesCount);
                 case VAR_DECL_STMT_RHS:
-                    return seekInAlternativesPaths(lookahead, currentDepth, matchingRulesCount, fixes, VAR_DECL_RHS);
-
+                    return seekInAlternativesPaths(lookahead, currentDepth, matchingRulesCount, VAR_DECL_RHS);
                 case BINARY_EXPR_RHS:
                     // Binary expr rhs can be either the end of the expression or can be (binary-op expression).
                     ParserRuleContext parentCtx = getParentContext();
@@ -404,12 +405,12 @@ public class BallerinaParserErrorHandler {
                         exprEndCtx = ParserRuleContext.SEMICOLON;
                     }
                     ParserRuleContext[] alternatives = { ParserRuleContext.BINARY_OPERATOR, exprEndCtx };
-                    return seekInAlternativesPaths(lookahead, currentDepth, matchingRulesCount, fixes, alternatives);
+                    return seekInAlternativesPaths(lookahead, currentDepth, matchingRulesCount, alternatives);
                 case COMMA:
                     hasMatch = nextToken.kind == TokenKind.COMMA;
                     break;
                 case PARAMETER_RHS:
-                    return seekInAlternativesPaths(lookahead, currentDepth, matchingRulesCount, fixes, PARAMETER_RHS);
+                    return seekInAlternativesPaths(lookahead, currentDepth, matchingRulesCount, PARAMETER_RHS);
 
                 // productions
                 case COMP_UNIT:
@@ -433,7 +434,7 @@ public class BallerinaParserErrorHandler {
                 Result fixedPathResult = fixAndContinue(currentCtx, lookahead, currentDepth + 1);
                 // Do not consider the current rule as match, since we had to fix it.
                 // i.e: do not increment the match count by 1;
-                return getFinalResult(matchingRulesCount, fixes, fixedPathResult);
+                return getFinalResult(matchingRulesCount, fixedPathResult);
             }
 
             currentCtx = getNextRule(currentCtx, lookahead + 1);
@@ -446,7 +447,7 @@ public class BallerinaParserErrorHandler {
 
         }
 
-        return new Result(fixes, matchingRulesCount);
+        return new Result(new ArrayDeque<>(), matchingRulesCount);
     }
 
     /**
@@ -459,8 +460,8 @@ public class BallerinaParserErrorHandler {
      * @param fixes Fixes made so far
      * @return Recovery result
      */
-    private Result seekInFuncBodies(int lookahead, int currentDepth, int currentMatches, ArrayDeque<Solution> fixes) {
-        return seekInAlternativesPaths(lookahead, currentDepth, currentMatches, fixes, FUNC_BODIES);
+    private Result seekInFuncBodies(int lookahead, int currentDepth, int currentMatches) {
+        return seekInAlternativesPaths(lookahead, currentDepth, currentMatches, FUNC_BODIES);
     }
 
     /**
@@ -475,18 +476,16 @@ public class BallerinaParserErrorHandler {
      * @return Recovery result
      */
     private Result seekInStatements(ParserRuleContext currentCtx, Token nextToken, int lookahead, int currentDepth,
-                                    int currentMatches, ArrayDeque<Solution> fixes) {
+                                    int currentMatches) {
         if (nextToken.kind == TokenKind.SEMICOLON) {
             // Semicolon at the start of a statement is a special case. This is equivalent to an empty
             // statement. So assume the fix for this is a REMOVE operation and continue from the next token.
             Result result = seekMatchInSubTree(ParserRuleContext.STATEMENT, lookahead + 1, currentDepth);
-            fixes.add(new Solution(Action.REMOVE, currentCtx, nextToken.kind, nextToken.toString()));
-            fixes.addAll(result.fixes);
-            currentMatches += result.matches;
-            return new Result(fixes, currentMatches);
+            result.fixes.add(new Solution(Action.REMOVE, currentCtx, nextToken.kind, nextToken.toString()));
+            return getFinalResult(currentMatches, result);
         }
 
-        return seekInAlternativesPaths(lookahead, currentDepth, currentMatches, fixes, STATEMENTS);
+        return seekInAlternativesPaths(lookahead, currentDepth, currentMatches, STATEMENTS);
     }
 
     /**
@@ -499,8 +498,7 @@ public class BallerinaParserErrorHandler {
      * @param fixes Fixes made so far
      * @return Recovery result
      */
-    private Result seekInExpression(ParserRuleContext currentCtx, int lookahead, int currentDepth, int currentMatches,
-                                    ArrayDeque<Solution> fixes) {
+    private Result seekInExpression(ParserRuleContext currentCtx, int lookahead, int currentDepth, int currentMatches) {
         Token nextToken = this.tokenReader.peek(lookahead);
         boolean hasMatch = false;
         switch (nextToken.kind) {
@@ -517,7 +515,7 @@ public class BallerinaParserErrorHandler {
         currentDepth++;
         if (!hasMatch) {
             Result fixedPathResult = fixAndContinue(currentCtx, lookahead, currentDepth);
-            return getFinalResult(currentMatches, fixes, fixedPathResult);
+            return getFinalResult(currentMatches, fixedPathResult);
         } else {
             lookahead++;
             currentMatches++;
@@ -538,7 +536,7 @@ public class BallerinaParserErrorHandler {
                 nextContext = ParserRuleContext.BINARY_EXPR_RHS;
             }
             Result result = seekMatch(nextContext, lookahead, currentDepth);
-            return getFinalResult(currentMatches, fixes, result);
+            return getFinalResult(currentMatches, result);
         }
     }
 
@@ -552,7 +550,7 @@ public class BallerinaParserErrorHandler {
      * @return Recovery result
      */
     private Result seekInAlternativesPaths(int lookahead, int currentDepth, int currentMatches,
-                                           ArrayDeque<Solution> fixes, ParserRuleContext[] alternativeRules) {
+                                           ParserRuleContext[] alternativeRules) {
 
         @SuppressWarnings("unchecked")
         List<Result>[] results = new List[LOOKAHEAD_LIMIT];
@@ -576,41 +574,36 @@ public class BallerinaParserErrorHandler {
 
         // This means there are no matches for any of the statements
         if (bestMatchIndex == 0) {
-            return new Result(fixes, currentMatches);
+            return new Result(new ArrayDeque<>(), currentMatches);
         }
 
-        // If there is only one 'best' match,
+        // If there is only one 'best' match, then return it. If there are more than one
+        // 'best' match, then we need to do a tie-break. For that, pick the path with the
+        // lowest number of fixes. If it again results in more than one match, then return
+        // the based on the precedence (order of occurrence).
         List<Result> bestMatches = results[bestMatchIndex];
         Result bestMatch = bestMatches.get(0);
-        if (bestMatches.size() == 1) {
-            return getFinalResult(currentMatches, fixes, bestMatch);
-        }
-
-        // If there are more than one 'best' match, then we need to do a tie-break.
-        // For that, pick the path with the lowest number of fixes.
-        // If it again results in more than one match, then return the based on the
-        // precedence (order of occurrence).
-        for (Result match : bestMatches) {
+        Result match;
+        for (int i = 1; i < bestMatches.size(); i++) {
+            match = bestMatches.get(i);
             if (match.fixes.size() < bestMatch.fixes.size()) {
                 bestMatch = match;
             }
         }
 
-        return getFinalResult(currentMatches, fixes, bestMatch);
+        return getFinalResult(currentMatches, bestMatch);
     }
 
     /**
      * Combine a given result with the current results, and get the final result.
      * 
      * @param currentMatches Matches found so far
-     * @param fixes FIxes found so far
      * @param bestMatch Result found in the sub-tree, that requires to be merged with the current results
      * @return Final result
      */
-    private Result getFinalResult(int currentMatches, ArrayDeque<Solution> fixes, Result bestMatch) {
-        currentMatches += bestMatch.matches;
-        fixes.addAll(bestMatch.fixes);
-        return new Result(fixes, currentMatches);
+    private Result getFinalResult(int currentMatches, Result bestMatch) {
+        bestMatch.matches += currentMatches;
+        return bestMatch;
     }
 
     /**
