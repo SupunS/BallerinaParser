@@ -620,6 +620,12 @@ public class BallerinaParser {
                 Token token = peek();
                 Solution solution = recover(token, ParserRuleContext.FUNC_BODY);
 
+                // If the recovered token is not something that can be re-parsed,
+                // then don't try to re-parse the same rule.
+                if (solution.tokenKind == TokenKind.OTHER) {
+                    break;
+                }
+
                 // If the parser recovered by inserting a token, then try to re-parse the same
                 // rule with the inserted token token. This is done to pick the correct branch
                 // to continue the parsing.
