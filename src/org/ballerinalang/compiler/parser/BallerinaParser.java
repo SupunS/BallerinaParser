@@ -249,10 +249,11 @@ public class BallerinaParser {
                 // If the parser recovered by inserting a token, then try to re-parse the same
                 // rule with the inserted token token. This is done to pick the correct branch
                 // to continue the parsing.
-                if (solution.action == Action.INSERT) {
-                    parseTopLevelNode(solution.tokenKind);
+                if (solution.action != Action.INSERT) {
+                    break;
                 }
-                break;
+
+                parseTopLevelNode(solution.tokenKind);
         }
     }
 
@@ -445,9 +446,11 @@ public class BallerinaParser {
             // If the parser recovered by inserting a token, then try to re-parse the same
             // rule with the inserted token token. This is done to pick the correct branch
             // to continue the parsing.
-            if (solution.action == Action.INSERT) {
-                parseParameterRhs(solution.tokenKind);
+            if (solution.action != Action.INSERT) {
+                return;
             }
+
+            parseParameterRhs(solution.tokenKind);
         }
     }
 
@@ -620,19 +623,21 @@ public class BallerinaParser {
                 Token token = peek();
                 Solution solution = recover(token, ParserRuleContext.FUNC_BODY);
 
+                // If the parser recovered by inserting a token, then try to re-parse the same
+                // rule with the inserted token token. This is done to pick the correct branch
+                // to continue the parsing.
+
+                if (solution.action != Action.INSERT) {
+                    break;
+                }
+
                 // If the recovered token is not something that can be re-parsed,
                 // then don't try to re-parse the same rule.
                 if (solution.tokenKind == TokenKind.OTHER) {
                     break;
                 }
 
-                // If the parser recovered by inserting a token, then try to re-parse the same
-                // rule with the inserted token token. This is done to pick the correct branch
-                // to continue the parsing.
-                if (solution.action == Action.INSERT) {
-                    parseFunctionBody(solution.tokenKind);
-                }
-                break;
+                parseFunctionBody(solution.tokenKind);
         }
 
         this.listner.exitFunctionBody();
@@ -893,18 +898,21 @@ public class BallerinaParser {
             default:
                 // If the next token in the token stream does not match to any of the statements and
                 // if it is not the end of statement, then try to fix it and continue.
-                if (!isEndOfBlock(tokenKind)) {
-                    Token token = peek();
-                    Solution solution = recover(token, ParserRuleContext.STATEMENT);
-
-                    // If the parser recovered by inserting a token, then try to re-parse the same
-                    // rule with the inserted token token. This is done to pick the correct branch
-                    // to continue the parsing.
-                    if (solution.action == Action.INSERT) {
-                        parseStatement(solution.tokenKind);
-                    }
+                if (isEndOfBlock(tokenKind)) {
+                    break;
                 }
-                break;
+
+                Token token = peek();
+                Solution solution = recover(token, ParserRuleContext.STATEMENT);
+
+                // If the parser recovered by inserting a token, then try to re-parse the same
+                // rule with the inserted token token. This is done to pick the correct branch
+                // to continue the parsing.
+                if (solution.action != Action.INSERT) {
+                    break;
+                }
+
+                parseStatement(solution.tokenKind);
         }
     }
 
@@ -962,10 +970,11 @@ public class BallerinaParser {
                 // If the parser recovered by inserting a token, then try to re-parse the same
                 // rule with the inserted token token. This is done to pick the correct branch
                 // to continue the parsing.
-                if (solution.action == Action.INSERT) {
-                    parseVarDeclRhs(solution.tokenKind);
+                if (solution.action != Action.INSERT) {
+                    break;
                 }
-                break;
+
+                parseVarDeclRhs(solution.tokenKind);
         }
     }
 
