@@ -114,9 +114,20 @@ function foo(int a, int b = 7 8, int c, string... d) {
     int y = 6;
 }
 
+function foo() {
+    Bar b = 5;
+}
+
+function bar(int a, Person p,) returns Student {
+    Foo f
+    Bar b
+}
+
 
 foo() {
 
 }
 
 function 
+
+

@@ -139,7 +139,7 @@ public class BallerinaParserListener {
         this.nodesStack.push(externFunc);
     }
 
-    public void exitFunctionName(Token name) {
+    public void exitIdentifier(Token name) {
         this.nodesStack.push(new IdentifierNode(name));
     }
 

@@ -43,8 +43,8 @@ public class TestParser {
     }
 
     private static void testParser(String content) throws FileNotFoundException {
-        BallerinaParser parser = new BallerinaParser(content);
         long sTime = System.currentTimeMillis();
+        BallerinaParser parser = new BallerinaParser(content);
         parser.parse();
         System.out.println("Time: " + (System.currentTimeMillis() - sTime) / 1000.0);
     }

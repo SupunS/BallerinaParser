@@ -39,6 +39,8 @@ public enum ParserRuleContext {
     VAR_DECL_STMT("var-decl-stmt"),
     VAR_DECL_STMT_RHS("var-decl-rhs"),
     VAR_DECL_STMT_RHS_VALUE("var-decl-rhs-value"),
+    TYPE_OR_VAR_NAME("type-or-var-name"),
+    ASSIGNMENT_OR_VAR_DECL_STMT_RHS("assign-or-var-decl-rhs"),
 
     // terminals
     PUBLIC("public"),

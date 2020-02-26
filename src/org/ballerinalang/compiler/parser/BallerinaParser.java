@@ -140,6 +140,12 @@ public class BallerinaParser {
             case TOP_LEVEL_NODE_WITH_MODIFIER:
                 parseTopLevelNodeWithModifier();
                 break;
+            case TYPE_OR_VAR_NAME:
+                parseUserDefinedTypeOrVarName();
+                break;
+            case ASSIGNMENT_OR_VAR_DECL_STMT_RHS:
+                parseAssignmentOrVarDeclRhs();
+                break;
             default:
                 throw new IllegalStateException("Cannot re-parse rule:" + context);
 
@@ -290,7 +296,7 @@ public class BallerinaParser {
     private void parseFunctionKeyword() {
         Token token = peek();
         if (token.kind == TokenKind.FUNCTION) {
-            this.listner.exitFunctionName(consume()); // function keyword
+            this.listner.exitSyntaxNode(consume()); // function keyword
         } else {
             recover(token, ParserRuleContext.FUNCTION_KEYWORD);
         }
@@ -299,7 +305,7 @@ public class BallerinaParser {
     private void parseFunctionName() {
         Token token = peek();
         if (token.kind == TokenKind.IDENTIFIER) {
-            this.listner.exitFunctionName(consume()); // function name
+            this.listner.exitIdentifier(consume()); // function name
         } else {
             recover(token, ParserRuleContext.FUNC_NAME);
         }
@@ -574,10 +580,14 @@ public class BallerinaParser {
      */
     private void parseTypeDescriptor() {
         Token token = peek();
-        if (token.kind == TokenKind.TYPE) {
-            this.listner.exitTypeDescriptor(consume()); // type descriptor
-        } else {
-            recover(token, ParserRuleContext.TYPE_DESCRIPTOR);
+        switch (token.kind) {
+            case TYPE:
+            case IDENTIFIER:
+                this.listner.exitTypeDescriptor(consume()); // type descriptor
+                break;
+            default:
+                recover(token, ParserRuleContext.TYPE_DESCRIPTOR);
+                break;
         }
 
         // TODO: only supports built-in types. Add others.
@@ -684,12 +694,25 @@ public class BallerinaParser {
     }
 
     /**
+     * Parse user defined type or variable name
+     */
+    private void parseUserDefinedTypeOrVarName() {
+        Token token = peek();
+        if (token.kind == TokenKind.IDENTIFIER) {
+            this.listner.exitIdentifier(consume()); // type or variable name
+            return;
+        } else {
+            recover(token, ParserRuleContext.TYPE_OR_VAR_NAME);
+        }
+    }
+
+    /**
      * Parse variable name
      */
     private void parseVariableName() {
         Token token = peek();
         if (token.kind == TokenKind.IDENTIFIER) {
-            this.listner.exitFunctionName(consume()); // function name
+            this.listner.exitIdentifier(consume()); // variable name
             return;
         } else {
             recover(token, ParserRuleContext.VARIABLE_NAME);
@@ -877,8 +900,10 @@ public class BallerinaParser {
      * Parse a single statement.
      */
     private void parseStatement() {
+        // switchContext(ParserRuleContext.STATEMENT);
         Token token = peek();
         parseStatement(token.kind);
+        // revertContext();
     }
 
     /**
@@ -889,11 +914,13 @@ public class BallerinaParser {
     private void parseStatement(TokenKind tokenKind) {
         switch (tokenKind) {
             case TYPE:
-                // TODO: add other statements that starts with a type
+                // If the statement starts with a built-in type, then its a var declration.
                 parseVariableDeclStmt();
                 break;
             case IDENTIFIER:
-                parseAssignmentStmt();
+                // If the statement starts with an identifier, it could be either an assignment
+                // statement or a var-decl-stmt with a user defined type.
+                parseAssignmentOrVarDecl();
                 break;
             default:
                 // If the next token in the token stream does not match to any of the statements and
@@ -938,7 +965,12 @@ public class BallerinaParser {
     }
 
     /**
+     * <p>
      * Parse the right hand side of a variable declaration statement.
+     * </p>
+     * <code>
+     * var-decl-rhs := ; | = action-or-expr ;
+     * </code>
      */
     private void parseVarDeclRhs() {
         Token token = peek();
@@ -979,6 +1011,55 @@ public class BallerinaParser {
     }
 
     /**
+     * If the statement starts with an identifier, it could be either an assignment statement or
+     * a var-decl-stmt with a user defined type. This method will parse such ambiguous scenarios.
+     */
+    private void parseAssignmentOrVarDecl() {
+        switchContext(ParserRuleContext.ASSIGNMENT_OR_VAR_DECL_STMT_RHS);
+        parseUserDefinedTypeOrVarName();
+        parseAssignmentOrVarDeclRhs();
+        revertContext();
+    }
+
+    /**
+     * Parse the second portion of an assignment statement or a var-decl statement when ambiguous.
+     */
+    private void parseAssignmentOrVarDeclRhs() {
+        Token token = peek();
+        parseAssignmentOrVarDeclRhs(token.kind);
+    }
+
+    /**
+     * Parse the second portion of an assignment statement or a var-decl statement when ambiguous,
+     * given the next token kind.
+     * 
+     * @param tokenKind Next token kind
+     */
+    private void parseAssignmentOrVarDeclRhs(TokenKind tokenKind) {
+        switch (tokenKind) {
+            case IDENTIFIER:
+                parseVariableName();
+                parseVarDeclRhs();
+                break;
+            case ASSIGN:
+                parseAssignmentStmtRhs();
+                break;
+            default:
+                Token token = peek();
+                Solution solution = recover(token, ParserRuleContext.ASSIGNMENT_OR_VAR_DECL_STMT_RHS);
+
+                // If the parser recovered by inserting a token, then try to re-parse the same
+                // rule with the inserted token token. This is done to pick the correct branch
+                // to continue the parsing.
+                if (solution.action != Action.INSERT) {
+                    break;
+                }
+
+                parseAssignmentOrVarDeclRhs(solution.tokenKind);
+        }
+    }
+
+    /**
      * <p>
      * Parse assignment statement, which takes the following format.
      * </p>
@@ -986,14 +1067,23 @@ public class BallerinaParser {
      */
     private void parseAssignmentStmt() {
         switchContext(ParserRuleContext.ASSIGNMENT_STMT);
-
         parseVariableName();
+        parseAssignmentStmtRhs();
+        this.listner.exitAssignmentStmt();
+        revertContext();
+    }
+
+    /**
+     * <p>
+     * Parse the RHS portion of the assignment.
+     * </p>
+     * <code>assignment-stmt-rhs := = action-or-expr ;</code>
+     */
+    private void parseAssignmentStmtRhs() {
         parseAssignOp();
         parseExpression();
         parseStatementEnd();
         this.listner.exitAssignmentStmt();
-
-        revertContext();
     }
 
     /*

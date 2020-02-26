@@ -70,6 +70,12 @@ public class BallerinaParserErrorHandler {
     private static final ParserRuleContext[] TOP_LEVEL_NODES_WITH_MODIFIERS =
             new ParserRuleContext[] { ParserRuleContext.PUBLIC, ParserRuleContext.FUNC_DEFINITION };
 
+    private static final ParserRuleContext[] TYPE_OR_VAR_NAME =
+            { ParserRuleContext.TYPE_DESCRIPTOR, ParserRuleContext.VARIABLE_NAME };
+
+    private static final ParserRuleContext[] ASSIGNMENT_OR_VAR_DECL_SECOND_TOKEN =
+            { ParserRuleContext.ASSIGN_OP, ParserRuleContext.VARIABLE_NAME };
+
     /**
      * Limit for the distance to travel, to determine a successful lookahead.
      */
@@ -193,6 +199,7 @@ public class BallerinaParserErrorHandler {
             case VAR_DECL_STMT_RHS:
             case BINARY_EXPR_RHS:
             case PARAMETER_RHS:
+            case ASSIGNMENT_OR_VAR_DECL_STMT_RHS:
                 return true;
             default:
                 return false;
@@ -411,7 +418,11 @@ public class BallerinaParserErrorHandler {
                     break;
                 case PARAMETER_RHS:
                     return seekInAlternativesPaths(lookahead, currentDepth, matchingRulesCount, PARAMETER_RHS);
-
+                case TYPE_OR_VAR_NAME:
+                    return seekInAlternativesPaths(lookahead, currentDepth, matchingRulesCount, TYPE_OR_VAR_NAME);
+                case ASSIGNMENT_OR_VAR_DECL_STMT_RHS:
+                    return seekInAlternativesPaths(lookahead, currentDepth, matchingRulesCount,
+                            ASSIGNMENT_OR_VAR_DECL_SECOND_TOKEN);
                 // productions
                 case COMP_UNIT:
                 case FUNC_DEFINITION:
@@ -481,7 +492,7 @@ public class BallerinaParserErrorHandler {
             // Semicolon at the start of a statement is a special case. This is equivalent to an empty
             // statement. So assume the fix for this is a REMOVE operation and continue from the next token.
             Result result = seekMatchInSubTree(ParserRuleContext.STATEMENT, lookahead + 1, currentDepth);
-            result.fixes.add(new Solution(Action.REMOVE, currentCtx, nextToken.kind, nextToken.toString()));
+            result.fixes.push(new Solution(Action.REMOVE, currentCtx, nextToken.kind, nextToken.toString()));
             return getFinalResult(currentMatches, result);
         }
 
@@ -581,11 +592,23 @@ public class BallerinaParserErrorHandler {
         // 'best' match, then we need to do a tie-break. For that, pick the path with the
         // lowest number of fixes. If it again results in more than one match, then return
         // the based on the precedence (order of occurrence).
+
         List<Result> bestMatches = results[bestMatchIndex];
         Result bestMatch = bestMatches.get(0);
         Result match;
         for (int i = 1; i < bestMatches.size(); i++) {
             match = bestMatches.get(i);
+
+            // If a tie is found, give priority to the one that 'insert'.
+            // If that is also a tie, then give priority to the order.
+            if (match.fixes.size() == bestMatch.fixes.size()) {
+                Solution currentSol = bestMatch.fixes.peek();
+                Solution foundSol = match.fixes.peek();
+                if (currentSol.action == Action.REMOVE && foundSol.action == Action.INSERT) {
+                    bestMatch = match;
+                }
+            }
+
             if (match.fixes.size() < bestMatch.fixes.size()) {
                 bestMatch = match;
             }
@@ -900,6 +923,7 @@ public class BallerinaParserErrorHandler {
             case STATEMENT:
             case VAR_DECL_STMT:
             case ASSIGNMENT_STMT:
+            case ASSIGNMENT_OR_VAR_DECL_STMT_RHS:
                 return true;
             default:
                 return false;
